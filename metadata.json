@@ -1,0 +1,6 @@
+{
+  "name": "好厉害宠物乐园 / Holy Pawfect Day",
+  "description": "一款专为好厉害宠物乐园（Holy Pawfect Day）设计的收银、记账与小票生成系统。",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
