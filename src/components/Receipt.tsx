@@ -51,6 +51,45 @@ export default function Receipt({
   const receiptRef = useRef<HTMLDivElement>(null);
   const invoiceRef = useRef<HTMLDivElement>(null);
 
+  const [parentWidth, setParentWidth] = useState<number>(0);
+  const [elementHeight, setElementHeight] = useState<number>(0);
+  const previewWrapperRef = useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (receiptMode !== 'invoice') return;
+    
+    const handleResize = () => {
+      if (previewWrapperRef.current) {
+        setParentWidth(previewWrapperRef.current.getBoundingClientRect().width);
+      }
+      if (invoiceRef.current) {
+        setElementHeight(invoiceRef.current.offsetHeight);
+      }
+    };
+
+    handleResize();
+    
+    let resizeObserver: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(() => {
+        handleResize();
+      });
+      if (previewWrapperRef.current) resizeObserver.observe(previewWrapperRef.current);
+      if (invoiceRef.current) resizeObserver.observe(invoiceRef.current);
+    }
+
+    window.addEventListener('resize', handleResize);
+    const timer = setTimeout(handleResize, 150);
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      if (resizeObserver) {
+        resizeObserver.disconnect();
+      }
+      clearTimeout(timer);
+    };
+  }, [receiptMode, invoiceStyle.containerWidth]);
+
   const formatDateToSlash = (dateStr?: string) => {
     if (!dateStr) return '-';
     const datePart = dateStr.split(' ')[0].split('T')[0];
@@ -383,66 +422,162 @@ export default function Receipt({
     const element = isInvoice ? invoiceRef.current : receiptRef.current;
     if (!element) return;
 
-    // Temporarily sanitize OKLCH and OKLAB stylesheets of the main document to prevent html2canvas parsing crash
-    const disabledElements: { el: HTMLStyleElement | HTMLLinkElement; wasDisabled: boolean }[] = [];
-    let combinedCss = '';
-
-    for (const sheet of Array.from(document.styleSheets)) {
-      const el = sheet.ownerNode as HTMLStyleElement | HTMLLinkElement | null;
-      if (!el) continue;
-
-      try {
-        const rules = Array.from(sheet.cssRules);
-        let sheetCss = '';
-        for (const rule of rules) {
-          sheetCss += rule.cssText + '\n';
-        }
-
-        const sheetLower = sheetCss.toLowerCase();
-        if (sheetLower.includes('oklch') || sheetLower.includes('oklab')) {
-          combinedCss += sheetCss + '\n';
-          disabledElements.push({ el, wasDisabled: el.disabled });
-          el.disabled = true;
-        }
-      } catch (e) {
-        // Ignore CORS stylesheets
-      }
-    }
-
-    let tempStyle: HTMLStyleElement | null = null;
-    if (combinedCss) {
-      const sanitizedCss = convertOklchToRgbString(combinedCss);
-      tempStyle = document.createElement('style');
-      tempStyle.id = 'html2canvas-temp-style';
-      tempStyle.textContent = sanitizedCss;
-      document.head.appendChild(tempStyle);
-    }
+    // Temporarily sanitize style elements on the live document to prevent html2canvas parsing crash
+    const restoredStyles: { el: HTMLStyleElement; originalText: string }[] = [];
+    const detachedLinks: { el: HTMLLinkElement; parent: Node; nextSibling: Node | null }[] = [];
+    let originalAdoptedStyleSheets: any[] = [];
 
     try {
-      const isInvoice = receiptMode === 'invoice';
+      // 1. Sanitize adoptedStyleSheets on the live document
+      try {
+        // @ts-ignore
+        if (document.adoptedStyleSheets) {
+          // @ts-ignore
+          originalAdoptedStyleSheets = [...document.adoptedStyleSheets];
+          // @ts-ignore
+          document.adoptedStyleSheets = [];
+        }
+      } catch (e) {
+        // Ignore
+      }
+
+      // 2. Sanitize and convert all style and link elements in the main live document
+      const styleElements = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]')) as (HTMLStyleElement | HTMLLinkElement)[];
+      for (const el of styleElements) {
+        if (el.tagName === 'STYLE') {
+          const style = el as HTMLStyleElement;
+          const originalText = style.textContent || '';
+          if (originalText.toLowerCase().includes('oklch') || originalText.toLowerCase().includes('oklab')) {
+            restoredStyles.push({ el: style, originalText });
+            style.textContent = convertOklchToRgbString(originalText);
+          }
+        } else if (el.tagName === 'LINK') {
+          const link = el as HTMLLinkElement;
+          const href = link.href || '';
+          // Skip Google Fonts
+          if (href.includes('fonts.googleapis.com') || href.includes('fonts.gstatic.com')) {
+            continue;
+          }
+          
+          // Detach link stylesheet to prevent html2canvas parsing crashes
+          const parent = link.parentNode;
+          if (parent) {
+            detachedLinks.push({
+              el: link,
+              parent,
+              nextSibling: link.nextSibling
+            });
+            link.remove();
+          }
+        }
+      }
+
       const containerWidthPx = isInvoice
-        ? Math.round((invoiceStyle.containerWidth / 25.4) * 96) + 120
+        ? Math.round((invoiceStyle.containerWidth / 25.4) * 96)
         : 450;
 
+      // Run html2canvas on the live element with onclone styling resets and sanitizations
       const canvas = await html2canvas(element, {
         scale: 2, // high quality
         useCORS: true,
         backgroundColor: '#ffffff',
         logging: false,
-        windowWidth: Math.max(window.innerWidth, containerWidthPx),
+        windowWidth: containerWidthPx + 100,
+        scrollX: 0,
+        scrollY: 0,
+        x: 0,
+        y: 0,
         onclone: (clonedDoc) => {
-          // If copyComputedStyles is needed, copy styles to ensure exact styling match
+          // 1. Clear any adopted stylesheets inside clonedDoc as well
+          try {
+            // @ts-ignore
+            clonedDoc.adoptedStyleSheets = [];
+          } catch (e) {
+            // Ignore
+          }
+
+          // 2. Sanitize style and link elements inside clonedDoc
+          const clonedStyleElements = Array.from(clonedDoc.querySelectorAll('style, link[rel="stylesheet"]')) as (HTMLStyleElement | HTMLLinkElement)[];
+          for (const el of clonedStyleElements) {
+            if (el.tagName === 'STYLE') {
+              const style = el as HTMLStyleElement;
+              if (style.textContent) {
+                style.textContent = convertOklchToRgbString(style.textContent);
+              }
+            } else if (el.tagName === 'LINK') {
+              const link = el as HTMLLinkElement;
+              const href = link.href || '';
+              if (href.includes('fonts.googleapis.com') || href.includes('fonts.gstatic.com')) {
+                continue;
+              }
+              try {
+                const sheet = link.sheet;
+                if (sheet) {
+                  let rulesText = '';
+                  const rules = Array.from(sheet.cssRules);
+                  for (const rule of rules) {
+                    rulesText += rule.cssText + '\n';
+                  }
+                  if (rulesText) {
+                    const styleEl = clonedDoc.createElement('style');
+                    styleEl.textContent = convertOklchToRgbString(rulesText);
+                    link.parentNode?.replaceChild(styleEl, link);
+                  }
+                }
+              } catch (e) {
+                link.parentNode?.removeChild(link);
+              }
+            }
+          }
+
+          // 3. Setup target cloned element
           const targetId = isInvoice ? 'formal-invoice-container' : `receipt-paper-${bill.id}`;
-          const clonedElement = clonedDoc.getElementById(targetId);
+          const clonedElement = clonedDoc.getElementById(targetId) as HTMLElement | null;
           if (clonedElement) {
+            // Recursively copy absolute styles inline to make it completely self-contained and accurate
+            copyComputedStyles(element, clonedElement);
+
+            // Reset transforms, borders, shadows so it is rendered completely
+            clonedElement.style.transform = 'none';
+            clonedElement.style.webkitTransform = 'none';
+            clonedElement.style.position = 'relative';
+            clonedElement.style.left = 'auto';
+            clonedElement.style.top = 'auto';
+            clonedElement.style.marginLeft = 'auto';
+            clonedElement.style.marginRight = 'auto';
+            clonedElement.style.boxShadow = 'none';
+            clonedElement.style.border = 'none';
+            clonedElement.style.opacity = '1';
+            clonedElement.style.visibility = 'visible';
+            clonedElement.style.display = 'block';
+
             if (isInvoice) {
               clonedElement.style.width = `${invoiceStyle.containerWidth}mm`;
               clonedElement.style.minWidth = `${invoiceStyle.containerWidth}mm`;
+              clonedElement.style.height = 'auto';
+              clonedElement.style.minHeight = '297mm';
+            } else {
+              clonedElement.style.width = '450px';
+              clonedElement.style.height = 'auto';
             }
-            copyComputedStyles(element, clonedElement);
+
+            // Expand all parents in cloned document to allow full height drawing
+            let parent = clonedElement.parentElement;
+            while (parent) {
+              parent.style.transform = 'none';
+              parent.style.webkitTransform = 'none';
+              parent.style.position = 'relative';
+              parent.style.left = 'auto';
+              parent.style.top = 'auto';
+              parent.style.width = '100%';
+              parent.style.height = 'auto';
+              parent.style.overflow = 'visible';
+              parent = parent.parentElement;
+            }
           }
         }
       });
+
       const imgData = canvas.toDataURL('image/png');
       const link = document.createElement('a');
       link.download = `好厉害乐园_${isInvoice ? '正式账单' : '小票'}_${bill.dogName}_${bill.billNumber}.png`;
@@ -452,12 +587,27 @@ export default function Receipt({
       console.error('Failed to generate image', err);
       triggerAlert('生成图片失败，请稍后重试');
     } finally {
-      // Restore original style sheets and remove temp style sheet
-      for (const item of disabledElements) {
-        item.el.disabled = item.wasDisabled;
+      // Restore original style content
+      for (const item of restoredStyles) {
+        item.el.textContent = item.originalText;
       }
-      if (tempStyle) {
-        tempStyle.remove();
+      // Re-insert detached link elements
+      for (const item of detachedLinks) {
+        try {
+          item.parent.insertBefore(item.el, item.nextSibling);
+        } catch (e) {
+          item.parent.appendChild(item.el);
+        }
+      }
+      // Restore original adoptedStyleSheets
+      try {
+        // @ts-ignore
+        if (document.adoptedStyleSheets && originalAdoptedStyleSheets.length > 0) {
+          // @ts-ignore
+          document.adoptedStyleSheets = originalAdoptedStyleSheets;
+        }
+      } catch (e) {
+        // Ignore
       }
     }
   };
@@ -468,62 +618,158 @@ export default function Receipt({
     const element = isInvoice ? invoiceRef.current : receiptRef.current;
     if (!element) return;
 
-    // Temporarily sanitize OKLCH and OKLAB stylesheets of the main document to prevent html2canvas parsing crash
-    const disabledElements: { el: HTMLStyleElement | HTMLLinkElement; wasDisabled: boolean }[] = [];
-    let combinedCss = '';
-
-    for (const sheet of Array.from(document.styleSheets)) {
-      const el = sheet.ownerNode as HTMLStyleElement | HTMLLinkElement | null;
-      if (!el) continue;
-
-      try {
-        const rules = Array.from(sheet.cssRules);
-        let sheetCss = '';
-        for (const rule of rules) {
-          sheetCss += rule.cssText + '\n';
-        }
-
-        const sheetLower = sheetCss.toLowerCase();
-        if (sheetLower.includes('oklch') || sheetLower.includes('oklab')) {
-          combinedCss += sheetCss + '\n';
-          disabledElements.push({ el, wasDisabled: el.disabled });
-          el.disabled = true;
-        }
-      } catch (e) {
-        // Ignore CORS stylesheets
-      }
-    }
-
-    let tempStyle: HTMLStyleElement | null = null;
-    if (combinedCss) {
-      const sanitizedCss = convertOklchToRgbString(combinedCss);
-      tempStyle = document.createElement('style');
-      tempStyle.id = 'html2canvas-temp-style';
-      tempStyle.textContent = sanitizedCss;
-      document.head.appendChild(tempStyle);
-    }
+    // Temporarily sanitize style elements on the live document to prevent html2canvas parsing crash
+    const restoredStyles: { el: HTMLStyleElement; originalText: string }[] = [];
+    const detachedLinks: { el: HTMLLinkElement; parent: Node; nextSibling: Node | null }[] = [];
+    let originalAdoptedStyleSheets: any[] = [];
 
     try {
-      const isInvoice = receiptMode === 'invoice';
+      // 1. Sanitize adoptedStyleSheets on the live document
+      try {
+        // @ts-ignore
+        if (document.adoptedStyleSheets) {
+          // @ts-ignore
+          originalAdoptedStyleSheets = [...document.adoptedStyleSheets];
+          // @ts-ignore
+          document.adoptedStyleSheets = [];
+        }
+      } catch (e) {
+        // Ignore
+      }
+
+      // 2. Sanitize and convert all style and link elements in the main live document
+      const styleElements = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]')) as (HTMLStyleElement | HTMLLinkElement)[];
+      for (const el of styleElements) {
+        if (el.tagName === 'STYLE') {
+          const style = el as HTMLStyleElement;
+          const originalText = style.textContent || '';
+          if (originalText.toLowerCase().includes('oklch') || originalText.toLowerCase().includes('oklab')) {
+            restoredStyles.push({ el: style, originalText });
+            style.textContent = convertOklchToRgbString(originalText);
+          }
+        } else if (el.tagName === 'LINK') {
+          const link = el as HTMLLinkElement;
+          const href = link.href || '';
+          // Skip Google Fonts
+          if (href.includes('fonts.googleapis.com') || href.includes('fonts.gstatic.com')) {
+            continue;
+          }
+          
+          // Detach link stylesheet to prevent html2canvas parsing crashes
+          const parent = link.parentNode;
+          if (parent) {
+            detachedLinks.push({
+              el: link,
+              parent,
+              nextSibling: link.nextSibling
+            });
+            link.remove();
+          }
+        }
+      }
+
       const containerWidthPx = isInvoice
-        ? Math.round((invoiceStyle.containerWidth / 25.4) * 96) + 120
+        ? Math.round((invoiceStyle.containerWidth / 25.4) * 96)
         : 450;
 
+      // Run html2canvas on the live element with onclone styling resets and sanitizations
       const canvas = await html2canvas(element, {
         scale: 2, // high quality
         useCORS: true,
         backgroundColor: '#ffffff',
         logging: false,
-        windowWidth: Math.max(window.innerWidth, containerWidthPx),
+        windowWidth: containerWidthPx + 100,
+        scrollX: 0,
+        scrollY: 0,
+        x: 0,
+        y: 0,
         onclone: (clonedDoc) => {
+          // 1. Clear any adopted stylesheets inside clonedDoc as well
+          try {
+            // @ts-ignore
+            clonedDoc.adoptedStyleSheets = [];
+          } catch (e) {
+            // Ignore
+          }
+
+          // 2. Sanitize style and link elements inside clonedDoc
+          const clonedStyleElements = Array.from(clonedDoc.querySelectorAll('style, link[rel="stylesheet"]')) as (HTMLStyleElement | HTMLLinkElement)[];
+          for (const el of clonedStyleElements) {
+            if (el.tagName === 'STYLE') {
+              const style = el as HTMLStyleElement;
+              if (style.textContent) {
+                style.textContent = convertOklchToRgbString(style.textContent);
+              }
+            } else if (el.tagName === 'LINK') {
+              const link = el as HTMLLinkElement;
+              const href = link.href || '';
+              if (href.includes('fonts.googleapis.com') || href.includes('fonts.gstatic.com')) {
+                continue;
+              }
+              try {
+                const sheet = link.sheet;
+                if (sheet) {
+                  let rulesText = '';
+                  const rules = Array.from(sheet.cssRules);
+                  for (const rule of rules) {
+                    rulesText += rule.cssText + '\n';
+                  }
+                  if (rulesText) {
+                    const styleEl = clonedDoc.createElement('style');
+                    styleEl.textContent = convertOklchToRgbString(rulesText);
+                    link.parentNode?.replaceChild(styleEl, link);
+                  }
+                }
+              } catch (e) {
+                link.parentNode?.removeChild(link);
+              }
+            }
+          }
+
+          // 3. Setup target cloned element
           const targetId = isInvoice ? 'formal-invoice-container' : `receipt-paper-${bill.id}`;
-          const clonedElement = clonedDoc.getElementById(targetId);
+          const clonedElement = clonedDoc.getElementById(targetId) as HTMLElement | null;
           if (clonedElement) {
+            // Recursively copy absolute styles inline to make it completely self-contained and accurate
+            copyComputedStyles(element, clonedElement);
+
+            // Reset transforms, borders, shadows so it is rendered completely
+            clonedElement.style.transform = 'none';
+            clonedElement.style.webkitTransform = 'none';
+            clonedElement.style.position = 'relative';
+            clonedElement.style.left = 'auto';
+            clonedElement.style.top = 'auto';
+            clonedElement.style.marginLeft = 'auto';
+            clonedElement.style.marginRight = 'auto';
+            clonedElement.style.boxShadow = 'none';
+            clonedElement.style.border = 'none';
+            clonedElement.style.opacity = '1';
+            clonedElement.style.visibility = 'visible';
+            clonedElement.style.display = 'block';
+
             if (isInvoice) {
               clonedElement.style.width = `${invoiceStyle.containerWidth}mm`;
               clonedElement.style.minWidth = `${invoiceStyle.containerWidth}mm`;
+              clonedElement.style.height = 'auto';
+              clonedElement.style.minHeight = '297mm';
+            } else {
+              clonedElement.style.width = '450px';
+              clonedElement.style.height = 'auto';
             }
-            copyComputedStyles(element, clonedElement);
+
+            // Expand all parents in cloned document to allow full height drawing
+            let parent = clonedElement.parentElement;
+            while (parent) {
+              parent.style.transform = 'none';
+              parent.style.webkitTransform = 'none';
+              parent.style.position = 'relative';
+              parent.style.left = 'auto';
+              parent.style.top = 'auto';
+              parent.style.width = '100%';
+              parent.style.height = 'auto';
+              parent.style.overflow = 'visible';
+              parent = parent.parentElement;
+            }
           }
         }
       });
@@ -549,12 +795,27 @@ export default function Receipt({
       console.error('Failed to generate PDF', err);
       triggerAlert('生成PDF失败，请稍后重试');
     } finally {
-      // Restore original style sheets and remove temp style sheet
-      for (const item of disabledElements) {
-        item.el.disabled = item.wasDisabled;
+      // Restore original style content
+      for (const item of restoredStyles) {
+        item.el.textContent = item.originalText;
       }
-      if (tempStyle) {
-        tempStyle.remove();
+      // Re-insert detached link elements
+      for (const item of detachedLinks) {
+        try {
+          item.parent.insertBefore(item.el, item.nextSibling);
+        } catch (e) {
+          item.parent.appendChild(item.el);
+        }
+      }
+      // Restore original adoptedStyleSheets
+      try {
+        // @ts-ignore
+        if (document.adoptedStyleSheets && originalAdoptedStyleSheets.length > 0) {
+          // @ts-ignore
+          document.adoptedStyleSheets = originalAdoptedStyleSheets;
+        }
+      } catch (e) {
+        // Ignore
       }
     }
   };
@@ -888,51 +1149,93 @@ export default function Receipt({
               </div>
             </div>
           </div>
-        ) : (
-          <div
-            ref={invoiceRef}
-            id="formal-invoice-container"
-            className="print-container min-h-[297mm] bg-white border border-slate-300 relative text-slate-800 font-formal mx-auto shadow-md"
-            style={{ 
-              width: `${invoiceStyle.containerWidth}mm`, 
-              padding: `${invoiceStyle.containerPadding}px`,
-              fontFamily: invoiceStyle.fontFamilyBase,
-            }}
-          >
-            {/* Scoped style override for custom borders and section font-families */}
-            <style dangerouslySetInnerHTML={{ __html: `
-              #formal-invoice-container, #formal-invoice-container * {
-                border-color: ${invoiceStyle.tableBorderColor} !important;
-              }
-              #formal-invoice-container .font-formal-header, 
-              #formal-invoice-container .font-formal-header * {
-                font-family: ${invoiceStyle.fontFamilyHeader} !important;
-              }
-              #formal-invoice-container .font-formal-table,
-              #formal-invoice-container .font-formal-table * {
-                font-family: ${invoiceStyle.fontFamilyTable} !important;
-              }
-              #formal-invoice-container .font-formal-address,
-              #formal-invoice-container .font-formal-address * {
-                font-family: ${invoiceStyle.fontFamilyAddress || 'system-ui, sans-serif'} !important;
-              }
-              #formal-invoice-container table th {
-                vertical-align: middle !important;
-                border-right-color: ${invoiceStyle.tableHeaderBg} !important;
-                border-left-color: ${invoiceStyle.tableHeaderBg} !important;
-              }
-              #formal-invoice-container table td {
-                vertical-align: middle !important;
-              }
-              #formal-invoice-container .date-cell-bg-match {
-                border-right-color: transparent !important;
-                border-left-color: transparent !important;
-              }
-              #formal-invoice-container .total-row-yellow td {
-                background-color: #FFF2CC !important;
-                border-color: #FFF2CC !important;
-              }
-            ` }} />
+        ) : (() => {
+          const targetWidthPx = Math.round((invoiceStyle.containerWidth / 25.4) * 96);
+          const availableWidth = Math.max(0, parentWidth - 16);
+          const invoiceScale = availableWidth > 0 && availableWidth < targetWidthPx ? availableWidth / targetWidthPx : 1;
+
+          return (
+            <div 
+              ref={previewWrapperRef} 
+              className="w-full flex flex-col items-center overflow-visible select-none"
+            >
+              <div 
+                style={{ 
+                  width: `${availableWidth > 0 ? availableWidth : targetWidthPx}px`,
+                  height: `${elementHeight * invoiceScale}px`,
+                  position: 'relative',
+                  overflow: 'hidden',
+                  transition: 'height 0.15s ease-out'
+                }}
+                className="flex justify-center"
+              >
+                <div
+                  ref={invoiceRef}
+                  id="formal-invoice-container"
+                  className="print-container bg-white border border-slate-300 relative text-slate-800 font-formal shadow-md origin-top select-text"
+                  style={{ 
+                    width: `${invoiceStyle.containerWidth}mm`, 
+                    minWidth: `${invoiceStyle.containerWidth}mm`, 
+                    minHeight: '297mm',
+                    padding: `${invoiceStyle.containerPadding}px`,
+                    fontFamily: invoiceStyle.fontFamilyBase,
+                    transform: `scale(${invoiceScale})`,
+                    transformOrigin: 'top center',
+                    position: 'absolute',
+                    top: 0,
+                    left: '50%',
+                    marginLeft: `-${targetWidthPx / 2}px`
+                  }}
+                >
+                  {/* Scoped style override for custom borders and section font-families */}
+                  <style dangerouslySetInnerHTML={{ __html: `
+                    #formal-invoice-container, #formal-invoice-container * {
+                      border-color: ${invoiceStyle.tableBorderColor} !important;
+                    }
+                    #formal-invoice-container .font-formal-header, 
+                    #formal-invoice-container .font-formal-header * {
+                      font-family: ${invoiceStyle.fontFamilyHeader} !important;
+                    }
+                    #formal-invoice-container .font-formal-table,
+                    #formal-invoice-container .font-formal-table * {
+                      font-family: ${invoiceStyle.fontFamilyTable} !important;
+                    }
+                    #formal-invoice-container .font-formal-address,
+                    #formal-invoice-container .font-formal-address * {
+                      font-family: ${invoiceStyle.fontFamilyAddress || 'system-ui, sans-serif'} !important;
+                    }
+                    #formal-invoice-container table th {
+                      vertical-align: middle !important;
+                      border-right-color: ${invoiceStyle.tableHeaderBg} !important;
+                      border-left-color: ${invoiceStyle.tableHeaderBg} !important;
+                    }
+                    #formal-invoice-container table td {
+                      vertical-align: middle !important;
+                    }
+                    #formal-invoice-container .date-cell-bg-match {
+                      border-right-color: transparent !important;
+                      border-left-color: transparent !important;
+                    }
+                    #formal-invoice-container .total-row-yellow td {
+                      background-color: #FFF2CC !important;
+                      border-color: #FFF2CC !important;
+                    }
+                    
+                    @media print {
+                      #formal-invoice-container {
+                        transform: none !important;
+                        position: relative !important;
+                        top: auto !important;
+                        left: auto !important;
+                        margin-left: auto !important;
+                        margin-right: auto !important;
+                        width: ${invoiceStyle.containerWidth}mm !important;
+                        min-width: ${invoiceStyle.containerWidth}mm !important;
+                        box-shadow: none !important;
+                        border: none !important;
+                      }
+                    }
+                  ` }} />
 
             {/* Formal Invoice Content */}
             <div className="space-y-6">
@@ -1249,40 +1552,26 @@ export default function Receipt({
                 </div>
 
                 {/* Sticky Note / Instructions Block with Top Underline Separator and transparent bg */}
-                {(bill.isMember || usedCouponsList.length > 0) && (
-                  <div 
-                    className="space-y-2 text-left bg-white text-slate-800"
-                    style={{
-                      marginTop: `${invoiceStyle.remarksDividerSpacing ?? 20}px`,
-                      paddingTop: invoiceStyle.showRemarksDivider ? `${invoiceStyle.remarksDividerSpacing ?? 20}px` : '0px',
-                      borderTop: invoiceStyle.showRemarksDivider ? `1px solid ${invoiceStyle.tableBorderColor || '#CBD5E1'}` : 'none'
-                    }}
-                  >
-                    <div className="font-black text-slate-900 text-xs tracking-wider border-b border-slate-200 pb-1 mb-1.5 uppercase">
-                      备注 / REMARKS:
-                    </div>
-                    {bill.isMember && (
-                      <div className="text-slate-800 leading-normal text-[11px] font-bold flex flex-wrap gap-1">
-                        <span className="font-black text-slate-900">【会员折扣 MEMBER DISCOUNT】:</span>
-                        <span>
-                          已享受【{bill.memberTypeName || '年卡会员'}】专属折上折优惠（主折扣率: {Math.round(bill.discount * 100)}% / {(bill.discount * 10).toFixed(1)}折）{bill.isMemberDay ? '，叠享会员日额外 8.8 折' : ''}。
-                        </span>
-                      </div>
-                    )}
-                    {usedCouponsList.length > 0 && (
-                      <div className="text-slate-800 leading-normal text-[11px] font-bold flex flex-wrap gap-1 mt-1.5">
-                        <span className="font-black text-emerald-700">【年卡抵扣券权益 ANNUAL COUPON BENEFIT】:</span>
-                        <span>
-                          本次结账已成功抵扣年卡尊享券权益：{usedCouponsList.join('、')}。
-                        </span>
-                      </div>
-                    )}
+                <div 
+                  className="space-y-2 text-left bg-white text-slate-800"
+                  style={{
+                    marginTop: `${invoiceStyle.remarksDividerSpacing ?? 20}px`,
+                    paddingTop: invoiceStyle.showRemarksDivider ? `${invoiceStyle.remarksDividerSpacing ?? 20}px` : '0px',
+                    borderTop: invoiceStyle.showRemarksDivider ? `1px solid ${invoiceStyle.tableBorderColor || '#CBD5E1'}` : 'none'
+                  }}
+                >
+                  <div className="text-slate-800 leading-normal text-[11px] font-bold">
+                    <div>备注:入住时间当天下午14点后，离园时间次日下午14点前</div>
+                    <div className="text-slate-500 font-semibold mt-0.5">NOTE: Check-in is from 2:00 PM on the day of arrival, and check-out is before 2:00 PM on the day of departure.</div>
                   </div>
-                )}
+                </div>
               </div>
             </div>
           </div>
-        )}
+        </div>
+      </div>
+    )
+  })()}
       </div>
     </motion.div>
   );

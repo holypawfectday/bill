@@ -21,25 +21,63 @@ export default defineConfig(() => {
               req.on('end', () => {
                 try {
                   const data = JSON.parse(body);
-                  const services = data.services;
-                  const memberships = data.memberships;
-                  
-                  if (!Array.isArray(services) || !Array.isArray(memberships)) {
-                    throw new Error('Invalid services or memberships data format');
-                  }
+                  let services = data.services;
+                  let memberships = data.memberships;
+                  let invoiceStyle = data.invoiceStyle;
                   
                   const targetPath = path.join(process.cwd(), 'src', 'defaults.ts');
-                  
+                  let fileContent = '';
+                  if (fs.existsSync(targetPath)) {
+                    fileContent = fs.readFileSync(targetPath, 'utf-8');
+                  }
+
+                  // Extract existing values if they are missing from the request
+                  if (!services && fileContent) {
+                    const match = fileContent.match(/export const DEFAULT_SERVICES: ServiceItem\[\] = ([\s\S]+?);/);
+                    if (match) {
+                      try {
+                        services = eval(`(${match[1]})`);
+                      } catch (e) {
+                        console.error('Failed to parse current DEFAULT_SERVICES:', e);
+                      }
+                    }
+                  }
+                  if (!memberships && fileContent) {
+                    const match = fileContent.match(/export const DEFAULT_MEMBERSHIPS: MemberType\[\] = ([\s\S]+?);/);
+                    if (match) {
+                      try {
+                        memberships = eval(`(${match[1]})`);
+                      } catch (e) {
+                        console.error('Failed to parse current DEFAULT_MEMBERSHIPS:', e);
+                      }
+                    }
+                  }
+                  if (!invoiceStyle && fileContent) {
+                    const match = fileContent.match(/export const DEFAULT_INVOICE_STYLE: InvoiceStyle = ([\s\S]+?);/);
+                    if (match) {
+                      try {
+                        invoiceStyle = eval(`(${match[1]})`);
+                      } catch (e) {
+                        console.error('Failed to parse current DEFAULT_INVOICE_STYLE:', e);
+                      }
+                    }
+                  }
+
+                  if (!services) services = [];
+                  if (!memberships) memberships = [];
+
                   const code = `/**
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { ServiceItem, MemberType } from './types';
+import { ServiceItem, MemberType, InvoiceStyle } from './types';
 
 export const DEFAULT_SERVICES: ServiceItem[] = ${JSON.stringify(services, null, 2)};
 
 export const DEFAULT_MEMBERSHIPS: MemberType[] = ${JSON.stringify(memberships, null, 2)};
+
+export const DEFAULT_INVOICE_STYLE: InvoiceStyle = ${invoiceStyle ? JSON.stringify(invoiceStyle, null, 2) : '{}'};
 `;
                   
                   fs.writeFileSync(targetPath, code, 'utf-8');

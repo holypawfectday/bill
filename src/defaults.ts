@@ -202,10 +202,10 @@ export const DEFAULT_INVOICE_STYLE: InvoiceStyle = {
   doubleUnderlineThickness: 3,
   hideStoreName: true, // Go ahead and hide store name by default as requested
   tableBorderColor: '#CBD5E1', // default slate-300 color
-  fontFamilyHeader: '"Microsoft YaHei", "微软雅黑", system-ui, sans-serif', // default formal serif for basic info
-  fontFamilyTable: '"Microsoft YaHei", "微软雅黑", system-ui, sans-serif', // default technical mono for table data
-  fontFamilyBase: '"Microsoft YaHei", "微软雅黑", system-ui, sans-serif', // default sans-serif for rest
-  fontFamilyAddress: '"Microsoft YaHei", "微软雅黑", system-ui, sans-serif',
+  fontFamilyHeader: '"Noto Sans SC", "Microsoft YaHei", "微软雅黑", system-ui, sans-serif', // default formal serif for basic info
+  fontFamilyTable: '"Noto Sans SC", "Microsoft YaHei", "微软雅黑", system-ui, sans-serif', // default technical mono for table data
+  fontFamilyBase: '"Noto Sans SC", "Microsoft YaHei", "微软雅黑", system-ui, sans-serif', // default sans-serif for rest
+  fontFamilyAddress: '"Noto Sans SC", "Microsoft YaHei", "微软雅黑", system-ui, sans-serif',
   addressLineHeight: '1.0',
   headerTableSpacing: 24,
   addressFontSize: 12,

@@ -92,14 +92,37 @@ export default function InvoiceStyleEditor({
 
         {/* 💾 保存格式按钮 */}
         <button
-          onClick={() => {
+          onClick={async () => {
+            // 1. 保存到当前浏览器的 LocalStorage
             localStorage.setItem('pet_paradise_invoice_style_v3', JSON.stringify(invoiceStyle));
-            customAlert("正式账单格式已成功保存！新建账单并导出正式账单时，将自动沿用此排版配置。", "格式保存成功 🐾");
+            
+            // 2. 同步保存到服务器根目录 defaults.ts 中，确保其他设备打开时保持完全一致
+            try {
+              const response = await fetch('/api/save-defaults', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  invoiceStyle,
+                }),
+              });
+              
+              if (response.ok) {
+                customAlert("正式账单格式已成功保存到本地并同步至服务器！在其他设备打开时，将自动沿用此排版和 Logo 🐾", "格式保存且同步成功 🐾");
+              } else {
+                const errData = await response.json();
+                customAlert(`本地保存成功，但服务器同步失败: ${errData.error || '未知错误'}. 建议在当前设备继续使用。`, "本地已保存 🐾");
+              }
+            } catch (err: any) {
+              console.error('Failed to sync invoice style to server:', err);
+              customAlert(`正式账单格式已成功保存在当前浏览器！但同步至服务器时遇到网络问题: ${err.message}`, "本地已保存 🐾");
+            }
           }}
           className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#EBA53B] hover:bg-[#d6932c] border-2 border-slate-800 rounded-2xl font-black text-slate-900 shadow-[3px_3px_0px_0px_#1A202C] hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all cursor-pointer text-xs"
         >
           <Sparkles className="w-4 h-4" />
-          <span>保存当前排版格式 (新账单将沿用)</span>
+          <span>保存当前排版格式 (所有设备同步)</span>
         </button>
 
         {/* Section Navigation Tabs */}
@@ -579,7 +602,7 @@ export default function InvoiceStyleEditor({
                 className="w-full px-3 py-2 text-xs font-bold border-2 border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#EBA53B] bg-white cursor-pointer"
               >
                 <option value='system-ui, -apple-system, sans-serif'>默认系统字体 (Standard System Sans-serif)</option>
-                <option value='"PingFang SC", "Microsoft YaHei", SimHei, sans-serif'>优雅现代黑体 (PingFang / Heiti SC)</option>
+                <option value='"Noto Sans SC", "PingFang SC", "Microsoft YaHei", SimHei, sans-serif'>优雅现代黑体 (Noto Sans SC / PingFang / YaHei)</option>
                 <option value='Georgia, "Times New Roman", SimSun, serif'>经典报刊宋体 (Georgia / SimSun)</option>
                 <option value='KaiTi, STKaiti, cursive, serif'>温暖复古楷体 (Kaiti / STKaiti)</option>
                 <option value='"JetBrains Mono", ui-monospace, SFMono-Regular, monospace'>极客技术等宽体 (JetBrains Mono / Code)</option>
@@ -598,7 +621,7 @@ export default function InvoiceStyleEditor({
                 className="w-full px-3 py-2 text-xs font-bold border-2 border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#EBA53B] bg-white cursor-pointer"
               >
                 <option value='system-ui, -apple-system, sans-serif'>默认系统字体 (Standard System Sans-serif)</option>
-                <option value='"PingFang SC", "Microsoft YaHei", SimHei, sans-serif'>优雅现代黑体 (PingFang / Heiti SC)</option>
+                <option value='"Noto Sans SC", "PingFang SC", "Microsoft YaHei", SimHei, sans-serif'>优雅现代黑体 (Noto Sans SC / PingFang / YaHei)</option>
                 <option value='Georgia, "Times New Roman", SimSun, serif'>经典报刊宋体 (Georgia / SimSun)</option>
                 <option value='KaiTi, STKaiti, cursive, serif'>温暖复古楷体 (Kaiti / STKaiti)</option>
                 <option value='"JetBrains Mono", ui-monospace, SFMono-Regular, monospace'>极客技术等宽体 (JetBrains Mono / Code)</option>
@@ -617,7 +640,7 @@ export default function InvoiceStyleEditor({
                 className="w-full px-3 py-2 text-xs font-bold border-2 border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#EBA53B] bg-white cursor-pointer"
               >
                 <option value='system-ui, -apple-system, sans-serif'>默认系统字体 (Standard System Sans-serif)</option>
-                <option value='"PingFang SC", "Microsoft YaHei", SimHei, sans-serif'>优雅现代黑体 (PingFang / Heiti SC)</option>
+                <option value='"Noto Sans SC", "PingFang SC", "Microsoft YaHei", SimHei, sans-serif'>优雅现代黑体 (Noto Sans SC / PingFang / YaHei)</option>
                 <option value='Georgia, "Times New Roman", SimSun, serif'>经典报刊宋体 (Georgia / SimSun)</option>
                 <option value='KaiTi, STKaiti, cursive, serif'>温暖复古楷体 (Kaiti / STKaiti)</option>
                 <option value='"JetBrains Mono", ui-monospace, SFMono-Regular, monospace'>极客技术等宽体 (JetBrains Mono / Code)</option>
@@ -636,7 +659,7 @@ export default function InvoiceStyleEditor({
                 className="w-full px-3 py-2 text-xs font-bold border-2 border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#EBA53B] bg-white cursor-pointer"
               >
                 <option value='system-ui, -apple-system, sans-serif'>默认系统字体 (Standard System Sans-serif)</option>
-                <option value='"PingFang SC", "Microsoft YaHei", SimHei, sans-serif'>优雅现代黑体 (PingFang / Heiti SC)</option>
+                <option value='"Noto Sans SC", "PingFang SC", "Microsoft YaHei", SimHei, sans-serif'>优雅现代黑体 (Noto Sans SC / PingFang / YaHei)</option>
                 <option value='Georgia, "Times New Roman", SimSun, serif'>经典报刊宋体 (Georgia / SimSun)</option>
                 <option value='KaiTi, STKaiti, cursive, serif'>温暖复古楷体 (Kaiti / STKaiti)</option>
                 <option value='"JetBrains Mono", ui-monospace, SFMono-Regular, monospace'>极客技术等宽体 (JetBrains Mono / Code)</option>

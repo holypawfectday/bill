@@ -486,7 +486,7 @@ export default function App() {
           />
         </div>
 
-        <div className={activeTab === 'invoice_design' ? '' : 'hidden'} id="tab-content-invoice-design">
+        <div className={activeTab === 'invoice_design' ? 'w-[900px] max-w-full mx-auto' : 'hidden'} id="tab-content-invoice-design">
           <div className="bg-white border-4 border-slate-800 rounded-3xl p-6 shadow-[6px_6px_0px_0px_#1A202C] space-y-4">
             {(() => {
               const previewBill = bills.length > 0 ? bills[0] : null;
