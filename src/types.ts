@@ -95,6 +95,7 @@ export interface MemberAssetAccount {
 }
 
 export interface InvoiceStyle {
+  lastUpdated?: number; // timestamp of last user save/sync
   logoUrl?: string; // Empty or undefined means use the default vector /logo.png
   logoSize: number; // in px
   logoSpacing: number; // margin-bottom in px

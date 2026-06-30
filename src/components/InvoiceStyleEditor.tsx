@@ -19,7 +19,9 @@ import {
   Sparkles, 
   HelpCircle,
   Eye,
-  Settings
+  Settings,
+  Download,
+  Upload
 } from 'lucide-react';
 
 interface InvoiceStyleEditorProps {
@@ -93,10 +95,18 @@ export default function InvoiceStyleEditor({
         {/* 💾 保存格式按钮 */}
         <button
           onClick={async () => {
-            // 1. 保存到当前浏览器的 LocalStorage
-            localStorage.setItem('pet_paradise_invoice_style_v3', JSON.stringify(invoiceStyle));
+            const updatedStyle = {
+              ...invoiceStyle,
+              lastUpdated: Date.now()
+            };
             
-            // 2. 同步保存到服务器根目录 defaults.ts 中，确保其他设备打开时保持完全一致
+            // 1. 保存到当前浏览器的 LocalStorage
+            localStorage.setItem('pet_paradise_invoice_style_v3', JSON.stringify(updatedStyle));
+            
+            // 2. 更新 React 状态，这样本地编辑界面和预览会立即显示最新的 lastUpdated 属性
+            setInvoiceStyle(updatedStyle);
+            
+            // 3. 同步保存到服务器根目录 defaults.ts 中，确保其他设备打开时保持完全一致
             try {
               const response = await fetch('/api/save-defaults', {
                 method: 'POST',
@@ -104,7 +114,7 @@ export default function InvoiceStyleEditor({
                   'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                  invoiceStyle,
+                  invoiceStyle: updatedStyle,
                 }),
               });
               
@@ -124,6 +134,55 @@ export default function InvoiceStyleEditor({
           <Sparkles className="w-4 h-4" />
           <span>保存当前排版格式 (所有设备同步)</span>
         </button>
+
+        {/* 📋 跨设备纯前端备份/同步导入导出 (适合 GitHub Pages 等无后端静态环境) */}
+        <div className="bg-[#FFFEEB] border-2 border-dashed border-slate-400 p-3 rounded-2xl space-y-2">
+          <div className="text-[10px] font-bold text-slate-500 text-center uppercase tracking-wider">
+            🌐 静态托管(如GitHub)跨设备同步小工具
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
+                const configStr = JSON.stringify(invoiceStyle, null, 2);
+                navigator.clipboard.writeText(configStr);
+                customAlert("当前排版配置已成功复制到剪贴板！你可以在其他设备上打开账单设计器，点击【导入配置】并粘贴即可恢复完全相同的排版 🐾", "配置已复制 🐾");
+              }}
+              className="flex-1 flex items-center justify-center gap-1.5 py-2 px-2.5 text-[10px] font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 hover:border-slate-800 rounded-xl transition-all cursor-pointer shadow-[1px_1px_0px_0px_#1A202C]"
+              title="复制当前排版配置 JSON"
+            >
+              <Download className="w-3.5 h-3.5 text-slate-500" />
+              <span>导出配置</span>
+            </button>
+            <button
+              onClick={() => {
+                const input = prompt("请在此粘贴你在其他设备导出的排版配置 JSON 字符：");
+                if (input) {
+                  try {
+                    const parsed = JSON.parse(input);
+                    if (parsed && typeof parsed === 'object') {
+                      const updated = {
+                        ...parsed,
+                        lastUpdated: Date.now()
+                      };
+                      setInvoiceStyle(updated);
+                      localStorage.setItem('pet_paradise_invoice_style_v3', JSON.stringify(updated));
+                      customAlert("排版配置已成功导入并应用！🎉", "导入成功 🐾");
+                    } else {
+                      customAlert("无效的配置格式，请确保粘贴的是完整的 JSON 文本。", "导入失败 ❌");
+                    }
+                  } catch (e) {
+                    customAlert("解析配置失败，请确保粘贴的是完整的、无缺失的 JSON 文本。", "导入失败 ❌");
+                  }
+                }
+              }}
+              className="flex-1 flex items-center justify-center gap-1.5 py-2 px-2.5 text-[10px] font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 hover:border-slate-800 rounded-xl transition-all cursor-pointer shadow-[1px_1px_0px_0px_#1A202C]"
+              title="粘贴并导入排版配置 JSON"
+            >
+              <Upload className="w-3.5 h-3.5 text-slate-500" />
+              <span>导入配置</span>
+            </button>
+          </div>
+        </div>
 
         {/* Section Navigation Tabs */}
         <div className="flex flex-wrap gap-1 bg-slate-100 p-1.5 rounded-2xl border border-slate-200">

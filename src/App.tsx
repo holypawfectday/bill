@@ -152,6 +152,55 @@ export default function App() {
     return DEFAULT_INVOICE_STYLE;
   });
 
+  // --- Auto-sync local invoiceStyle drafts to the server or sync from server if local is stale ---
+  useEffect(() => {
+    const local = localStorage.getItem('pet_paradise_invoice_style_v3');
+    if (local) {
+      try {
+        const parsed = JSON.parse(local);
+        const serverTimestamp = DEFAULT_INVOICE_STYLE.lastUpdated || 0;
+        const localTimestamp = parsed.lastUpdated || 0;
+
+        if (localTimestamp < serverTimestamp) {
+          // Stale local storage detected! Let's synchronize B's stale layout to the new server master style.
+          setInvoiceStyle(DEFAULT_INVOICE_STYLE);
+          localStorage.setItem('pet_paradise_invoice_style_v3', JSON.stringify(DEFAULT_INVOICE_STYLE));
+          console.log('Stale local invoice style discarded. Synchronized with the latest server style!');
+        } else if (localTimestamp === 0 && serverTimestamp === 0) {
+          // Both are 0 (unversioned). This is the custom layout designed on their computer.
+          // Let's promote this layout to the server-side DEFAULT_INVOICE_STYLE.
+          const updatedWithTimestamp = {
+            ...parsed,
+            lastUpdated: Date.now()
+          };
+          setInvoiceStyle(updatedWithTimestamp);
+          localStorage.setItem('pet_paradise_invoice_style_v3', JSON.stringify(updatedWithTimestamp));
+          
+          fetch('/api/save-defaults', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              invoiceStyle: updatedWithTimestamp,
+            }),
+          }).then(res => {
+            if (res.ok) {
+              console.log('Successfully auto-promoted local invoice style custom draft to server defaults!');
+            }
+          }).catch(err => {
+            console.error('Failed to auto-sync local draft to server:', err);
+          });
+        }
+      } catch (e) {
+        console.error('Failed to run startup sync for invoiceStyle:', e);
+      }
+    } else {
+      // If no local storage exists at all, make sure it is updated with the server's default
+      localStorage.setItem('pet_paradise_invoice_style_v3', JSON.stringify(DEFAULT_INVOICE_STYLE));
+    }
+  }, []);
+
   useEffect(() => {
     localStorage.setItem('pet_paradise_invoice_style_v3', JSON.stringify(invoiceStyle));
   }, [invoiceStyle]);
