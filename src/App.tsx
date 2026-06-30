@@ -11,6 +11,7 @@ import BillForm from './components/BillForm';
 import ServiceSettings from './components/ServiceSettings';
 import Receipt from './components/Receipt';
 import HistoryList from './components/HistoryList';
+import InvoiceStyleEditor from './components/InvoiceStyleEditor';
 import { PawPrint, Settings, Receipt as ReceiptIcon, Calendar, CheckSquare, PlusCircle, BarChart3, Clock, Sparkles } from 'lucide-react';
 import { CutePuppyHead, PinkHeart, BlueSparkle, YellowSparkle, HolyPawfectPuppy, HolyPawfectLogo } from './components/CuteDoodles';
 import { downloadCSV } from './utils/export';
@@ -535,29 +536,13 @@ export default function App() {
           />
         </div>
 
-        <div className={activeTab === 'invoice_design' ? 'w-[900px] max-w-full mx-auto' : 'hidden'} id="tab-content-invoice-design">
-          <div className="bg-white border-4 border-slate-800 rounded-3xl p-6 shadow-[6px_6px_0px_0px_#1A202C] space-y-4">
-            {(() => {
-              const previewBill = bills.length > 0 ? bills[0] : null;
-              return previewBill ? (
-                <div className="w-full flex justify-center bg-slate-50 border-4 border-dashed border-slate-300 rounded-3xl p-6 overflow-x-auto">
-                  <div className="min-w-max">
-                    <Receipt 
-                      bill={previewBill} 
-                      customAlert={customAlert} 
-                      invoiceStyle={invoiceStyle}
-                      defaultMode="invoice"
-                      showInvoiceToggle={false}
-                    />
-                  </div>
-                </div>
-              ) : (
-                <div className="border-4 border-dashed border-slate-300 bg-white rounded-3xl p-12 text-center space-y-3">
-                  <p className="text-xs text-slate-800 font-black">请在收银台生成或选择一笔账单查看预览</p>
-                </div>
-              );
-            })()}
-          </div>
+        <div className={activeTab === 'invoice_design' ? 'w-full max-w-7xl mx-auto px-4 md:px-6' : 'hidden'} id="tab-content-invoice-design">
+          <InvoiceStyleEditor
+            invoiceStyle={invoiceStyle}
+            setInvoiceStyle={setInvoiceStyle}
+            bills={bills}
+            customAlert={customAlert}
+          />
         </div>
       </main>
 
