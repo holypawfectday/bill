@@ -55,7 +55,8 @@ export default function InvoiceStyleEditor({
 
   // Cute preset cute image links
   const logoPresets = [
-    { name: '可爱卡通狗 (Default Vector)', url: '' },
+    { name: '专属乐园 Logo (logo-bill.jpg)', url: '/logo-bill.jpg' },
+    { name: '可爱卡通狗 (Vector)', url: '' },
     { name: '温馨大脚印 (Footprint)', url: 'https://images.unsplash.com/photo-1541599540903-216a46ca1df0?auto=format&fit=crop&w=150&q=80' },
     { name: '圣洁宠物光环 (Halo)', url: 'https://images.unsplash.com/photo-1516738901171-8eb4fc13bd20?auto=format&fit=crop&w=150&q=80' }
   ];

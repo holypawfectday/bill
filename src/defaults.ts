@@ -183,7 +183,7 @@ export const DEFAULT_MEMBERSHIPS: MemberType[] = [
 ];
 
 export const DEFAULT_INVOICE_STYLE: InvoiceStyle = {
-  logoUrl: '',
+  logoUrl: '/logo-bill.jpg',
   logoSize: 112, // 112px
   logoSpacing: 10, // 10px spacing
   englishTitle: 'Holy Pawfect Day!',
