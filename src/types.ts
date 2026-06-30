@@ -26,6 +26,11 @@ export interface BillItem {
   quantity: number;
   unit: string;
   originalPrice?: number;
+  date?: string; // 服务日期
+  discountPreset?: '原价' | '88折' | '8折' | '5折' | '7折' | '6折' | '自定' | '大众点评';
+  customDiscountValue?: number;
+  appliedCoupon?: 'none' | 'daycare' | 'boarding' | 'special_care' | 'wash' | 'transfer' | 'dental';
+  memberDayStacked?: boolean;
 }
 
 export interface Bill {
@@ -38,7 +43,7 @@ export interface Bill {
   checkInDate: string;  // 入住日期
   checkOutDate: string; // 离园时间
   isMember: boolean;    // 是否会员 (true = 会员, false = 非会员)
-  discountPreset: '原价' | '88折' | '8折' | '7折' | '6折' | '100%' | '88%' | '80%' | '自定' | '大众点评';
+  discountPreset: '原价' | '88折' | '8折' | '5折' | '7折' | '6折' | '100%' | '88%' | '80%' | '自定' | '大众点评';
   customDiscountValue?: number; // 比如 8.5 表示 8.5折 (0.85)
   ownerPhone?: string;
   memberTypeId: string;

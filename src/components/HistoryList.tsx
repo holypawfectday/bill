@@ -13,6 +13,7 @@ interface HistoryListProps {
   bills: Bill[];
   onSelectBill: (bill: Bill) => void;
   onDeleteBill: (id: string) => void;
+  onDeleteAllBills?: () => void;
   selectedBillId?: string;
   lastDeletedBill: Bill | null;
   onUndoDelete: () => void;
@@ -24,6 +25,7 @@ export default function HistoryList({
   bills,
   onSelectBill,
   onDeleteBill,
+  onDeleteAllBills,
   selectedBillId,
   lastDeletedBill,
   onUndoDelete,
@@ -83,11 +85,11 @@ export default function HistoryList({
           </div>
           <p className="text-[10px] text-slate-500 font-black uppercase tracking-wider">累计总营业额</p>
           <p className="text-2xl font-black font-mono mt-1 text-slate-900">
-            ¥{totalRevenue.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            ¥{totalRevenue.toLocaleString('zh-CN', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
           </p>
           <div className="flex items-center gap-1.5 mt-2 text-[10px] text-slate-600 font-bold">
             <TrendingUp className="w-3.5 h-3.5 text-rose-500" />
-            <span>卡内累计抵扣节省: <strong className="text-slate-800 font-mono font-black">¥{totalDiscountSaved.toFixed(0)}</strong></span>
+            <span>卡内累计抵扣节省: <strong className="text-slate-800 font-mono font-black">¥{totalDiscountSaved.toFixed(1)}</strong></span>
           </div>
         </div>
 
@@ -99,7 +101,7 @@ export default function HistoryList({
           <div>
             <p className="text-[10px] text-slate-650 font-black uppercase tracking-wider">今日乐园收益</p>
             <p className="text-2xl font-black font-mono text-slate-900 mt-1">
-              ¥{todayRevenue.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              ¥{todayRevenue.toLocaleString('zh-CN', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
             </p>
           </div>
           <div className="text-[10px] text-slate-600 mt-2 flex items-center gap-1.5 font-bold">
@@ -226,6 +228,18 @@ export default function HistoryList({
               <Download className="w-3.5 h-3.5" />
               <span>导出账单列表 ({filteredBills.length} 笔)</span>
             </button>
+
+            {onDeleteAllBills && bills.length > 0 && (
+              <button
+                type="button"
+                onClick={onDeleteAllBills}
+                className="px-3 py-2 bg-rose-100 hover:bg-rose-200 border-2 border-slate-800 text-rose-800 text-xs font-black rounded-xl flex items-center gap-1.5 shadow-[2px_2px_0px_0px_#1A202C] active:translate-x-[1px] active:translate-y-[1px] active:shadow-[1px_1px_0px_0px_#1A202C] transition-all duration-150 cursor-pointer"
+                title="清空全部历史账单记录"
+              >
+                <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                <span>清空全部账单</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -295,7 +309,7 @@ export default function HistoryList({
 
                       {/* Price */}
                       <td className="py-3 px-3 text-right font-mono font-black text-slate-900">
-                        ¥{bill.total.toFixed(2)}
+                        ¥{bill.total.toFixed(1)}
                       </td>
 
                       {/* Actions */}

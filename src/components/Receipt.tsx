@@ -17,9 +17,16 @@ interface ReceiptProps {
   customAlert?: (message: string, title?: string) => Promise<void>;
   invoiceStyle?: InvoiceStyle;
   defaultMode?: 'ticket' | 'invoice';
+  showInvoiceToggle?: boolean;
 }
 
-export default function Receipt({ bill, customAlert, invoiceStyle = DEFAULT_INVOICE_STYLE, defaultMode }: ReceiptProps) {
+export default function Receipt({ 
+  bill, 
+  customAlert, 
+  invoiceStyle = DEFAULT_INVOICE_STYLE, 
+  defaultMode,
+  showInvoiceToggle = true
+}: ReceiptProps) {
   const triggerAlert = (message: string) => {
     if (customAlert) {
       customAlert(message);
@@ -28,7 +35,17 @@ export default function Receipt({ bill, customAlert, invoiceStyle = DEFAULT_INVO
     }
   };
   const [copied, setCopied] = useState(false);
-  const [receiptMode, setReceiptMode] = useState<'ticket' | 'invoice'>(defaultMode || 'ticket');
+  const [receiptMode, setReceiptMode] = useState<'ticket' | 'invoice'>(
+    defaultMode || (showInvoiceToggle ? 'ticket' : 'invoice')
+  );
+
+  React.useEffect(() => {
+    if (defaultMode) {
+      setReceiptMode(defaultMode);
+    } else {
+      setReceiptMode(showInvoiceToggle ? 'ticket' : 'invoice');
+    }
+  }, [defaultMode, showInvoiceToggle]);
   const [logoError, setLogoError] = useState(false);
   const [logo2Error, setLogo2Error] = useState(false);
   const receiptRef = useRef<HTMLDivElement>(null);
@@ -265,12 +282,15 @@ export default function Receipt({ bill, customAlert, invoiceStyle = DEFAULT_INVO
   // Calculate savings
   const savings = bill.subtotal - bill.total;
 
-  // Determine whether to display Remarks: only when using Dianping or Annual Card member benefits
+  // Find or calculate the room type based on the boarding service selected
+  const roomType = React.useMemo(() => {
+    const boardingItem = bill.items.find(item => item.name.includes('房') || item.name.includes('寄养'));
+    return boardingItem ? boardingItem.name.replace(/\(.*?\)/g, '').trim() : '标准度假房 Standard Room';
+  }, [bill.items]);
+
+  // Determine whether to display Remarks: only when using discount coupons or member day 88% discount
   const showRemarks = React.useMemo(() => {
-    // 1. Dianping discount preset
-    const hasDianping = bill.discountPreset === '大众点评';
-    
-    // 2. Annual Card benefits
+    // 1. Coupon usage (vouchers / discount coupons)
     const getCouponQty = (val: boolean | number | undefined): number => {
       if (val === undefined) return 0;
       if (typeof val === 'number') return val;
@@ -285,19 +305,43 @@ export default function Receipt({ bill, customAlert, invoiceStyle = DEFAULT_INVO
     
     const hasCoupons = daycareQty > 0 || boardingQty > 0 || specialCareQty > 0 || washQty > 0 || transferQty > 0 || dentalQty > 0;
     
-    // Check if matching account tier contains "年卡"
-    const hasAnnualCardTier = !!(matchedFamilyAccount?.tier && matchedFamilyAccount.tier.includes('年卡'));
+    // 2. Member Day 88% discount usage
+    const hasMemberDay88 = !!(bill.isMemberDay && bill.memberDayDiscountAmount && bill.memberDayDiscountAmount > 0) || bill.items.some(item => item.memberDayStacked);
     
-    return hasDianping || hasCoupons || hasAnnualCardTier;
+    return hasCoupons || hasMemberDay88;
   }, [
-    bill.discountPreset, 
     bill.useDaycareCoupon, 
     bill.useBoardingUpgradeCoupon, 
     bill.useSpecialCareUpgradeCoupon, 
     bill.useWashUpgradeCoupon, 
     bill.useTransferCoupon, 
     bill.useDentalCoupon, 
-    matchedFamilyAccount?.tier
+    bill.isMemberDay,
+    bill.memberDayDiscountAmount,
+    bill.items
+  ]);
+
+  const usedCouponsList = React.useMemo(() => {
+    const list: string[] = [];
+    const getCouponQty = (val: boolean | number | undefined): number => {
+      if (val === undefined) return 0;
+      if (typeof val === 'number') return val;
+      return val ? 1 : 0;
+    };
+    if (getCouponQty(bill.useDaycareCoupon) > 0) list.push(`全天日托兑换券 (x${getCouponQty(bill.useDaycareCoupon)})`);
+    if (getCouponQty(bill.useBoardingUpgradeCoupon) > 0) list.push(`度假房升级房券 (x${getCouponQty(bill.useBoardingUpgradeCoupon)})`);
+    if (getCouponQty(bill.useSpecialCareUpgradeCoupon) > 0) list.push(`特殊陪护房升级券 (x${getCouponQty(bill.useSpecialCareUpgradeCoupon)})`);
+    if (getCouponQty(bill.useWashUpgradeCoupon) > 0) list.push(`高端洗护升级券 (x${getCouponQty(bill.useWashUpgradeCoupon)})`);
+    if (getCouponQty(bill.useTransferCoupon) > 0) list.push(`10km同城接送券 (x${getCouponQty(bill.useTransferCoupon)})`);
+    if (getCouponQty(bill.useDentalCoupon) > 0) list.push(`高端洁牙抵扣券 (x${getCouponQty(bill.useDentalCoupon)})`);
+    return list;
+  }, [
+    bill.useDaycareCoupon,
+    bill.useBoardingUpgradeCoupon,
+    bill.useSpecialCareUpgradeCoupon,
+    bill.useWashUpgradeCoupon,
+    bill.useTransferCoupon,
+    bill.useDentalCoupon
   ]);
 
   // Print Receipt
@@ -524,19 +568,19 @@ export default function Receipt({ bill, customAlert, invoiceStyle = DEFAULT_INVO
     
     let itemsStr = `收费明细:\n`;
     bill.items.forEach((item, index) => {
-      itemsStr += `${index + 1}. ${item.name} | ¥${item.price} x ${item.quantity} ${item.unit}\n`;
+      itemsStr += `${index + 1}. ${item.name} | ¥${item.price.toFixed(1)} x ${item.quantity} ${item.unit}\n`;
     });
     
-    let pricing = `\n原价合计: ¥${bill.subtotal.toFixed(2)}\n会员级别: ${bill.memberTypeName}\n`;
+    let pricing = `\n原价合计: ¥${bill.subtotal.toFixed(1)}\n会员级别: ${bill.memberTypeName}\n`;
     if (bill.isHoliday) {
       pricing += `法定节假日: 是 (节假日不享受会员折扣与兑换券)\n`;
     } else {
       pricing += `专属折扣: ${Math.round(bill.discount * 100)}%\n`;
       if (bill.isMemberDay && bill.memberDayDiscountAmount && bill.memberDayDiscountAmount > 0) {
-        pricing += `🎉 会员日额外88折: -¥${bill.memberDayDiscountAmount.toFixed(2)}\n`;
+        pricing += `🎉 会员日额外88折: -¥${bill.memberDayDiscountAmount.toFixed(1)}\n`;
       }
     }
-    pricing += `应收总计: ¥${bill.total.toFixed(2)}\n`;
+    pricing += `应收总计: ¥${bill.total.toFixed(1)}\n`;
     
     const footer = `-----------------------------\n凭本小票可免费领取狗狗肉干一份 🥩\n祝 ${bill.dogName} 永远开开心心，健康茁壮成长！🐾`;
 
@@ -560,52 +604,58 @@ export default function Receipt({ bill, customAlert, invoiceStyle = DEFAULT_INVO
       transition={{ duration: 0.3 }}
       className="space-y-4 w-full"
     >
-      {/* Mode Selector and Action Buttons */}
-      <div className="flex flex-col sm:flex-row gap-3 justify-between items-center no-print bg-slate-100 p-3.5 rounded-2xl border-2 border-slate-800">
+      {/* Action Buttons & Mode Toggle at the very top */}
+      <div className="flex flex-col sm:flex-row gap-3 justify-between items-center no-print bg-[#FFFEEB] p-3.5 rounded-2xl border-2 border-slate-800 shadow-[2px_2px_0px_0px_#1A202C]">
         {/* Toggle Mode */}
-        <div className="flex bg-white p-1 rounded-xl border-2 border-slate-800 shadow-[2px_2px_0px_0px_#1A202C] gap-1">
-          <button
-            onClick={() => setReceiptMode('ticket')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-black rounded-lg transition-all cursor-pointer ${
-              receiptMode === 'ticket'
-                ? 'bg-slate-900 text-white'
-                : 'text-slate-700 hover:bg-slate-50'
-            }`}
-          >
-            <PawPrint className="w-3.5 h-3.5" />
-            <span>🧾 简约热敏小票</span>
-          </button>
-          <button
-            onClick={() => setReceiptMode('invoice')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-black rounded-lg transition-all cursor-pointer ${
-              receiptMode === 'invoice'
-                ? 'bg-[#B9E3F8] text-slate-900 border border-slate-800'
-                : 'text-slate-700 hover:bg-slate-50'
-            }`}
-          >
-            <FileText className="w-3.5 h-3.5" />
-            <span>📋 正式网格账单</span>
-          </button>
-        </div>
+        {showInvoiceToggle ? (
+          <div className="flex bg-white p-1 rounded-xl border-2 border-slate-800 shadow-[1.5px_1.5px_0px_0px_#1A202C] gap-1">
+            <button
+              onClick={() => setReceiptMode('ticket')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-black rounded-lg transition-all cursor-pointer ${
+                receiptMode === 'ticket'
+                  ? 'bg-slate-900 text-white'
+                  : 'text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              <PawPrint className="w-3.5 h-3.5" />
+              <span>🧾 简约热敏小票</span>
+            </button>
+            <button
+              onClick={() => setReceiptMode('invoice')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-black rounded-lg transition-all cursor-pointer ${
+                receiptMode === 'invoice'
+                  ? 'bg-[#B9E3F8] text-slate-900 border border-slate-800'
+                  : 'text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              <FileText className="w-3.5 h-3.5" />
+              <span>📋 正式网格账单</span>
+            </button>
+          </div>
+        ) : (
+          <div className="text-xs font-black text-slate-700 px-2 py-1">
+            ✨ 正式账单预览 (Formal Layout Preview)
+          </div>
+        )}
 
         {/* Action Buttons */}
         <div className="flex flex-wrap gap-2 justify-end w-full sm:w-auto">
           <button
             onClick={handleDownloadImage}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-slate-850 bg-white border-2 border-slate-800 rounded-xl hover:bg-slate-50 active:translate-y-0.5 transition-all font-black shadow-[2px_2px_0px_0px_#1A202C] cursor-pointer"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs text-slate-850 bg-white border-2 border-slate-800 rounded-xl hover:bg-slate-50 active:translate-y-0.5 transition-all font-black shadow-[2px_2px_0px_0px_#1A202C] cursor-pointer"
             title="生成并下载PNG图片"
           >
-            <ImageIcon className="w-3.5 h-3.5 text-slate-800" />
+            <ImageIcon className="w-4 h-4 text-slate-800" />
             <span>保存为账单图片</span>
           </button>
 
           <button
             onClick={handleDownloadPDF}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-slate-850 bg-white border-2 border-slate-800 rounded-xl hover:bg-slate-50 active:translate-y-0.5 transition-all font-black shadow-[2px_2px_0px_0px_#1A202C] cursor-pointer"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs text-slate-850 bg-white border-2 border-slate-800 rounded-xl hover:bg-slate-50 active:translate-y-0.5 transition-all font-black shadow-[2px_2px_0px_0px_#1A202C] cursor-pointer"
             title="生成并下载PDF文档"
           >
-            <FileText className="w-3.5 h-3.5 text-slate-850" />
-            <span>保存为 PDF 账单</span>
+            <FileText className="w-4 h-4 text-slate-850" />
+            <span>保存为PDF</span>
           </button>
         </div>
       </div>
@@ -634,7 +684,7 @@ export default function Receipt({ bill, customAlert, invoiceStyle = DEFAULT_INVO
               <div className="text-center space-y-1.5">
                 <div className="inline-flex items-center justify-center gap-1.5 text-slate-900 bg-[#B9E3F8] px-3 py-1 rounded-xl border-2 border-slate-800 shadow-[1.5px_1.5px_0px_0px_#1A202C]">
                   <PawPrint className="w-4 h-4 fill-slate-900 stroke-slate-900" />
-                  <span className="text-[10px] font-black tracking-widest uppercase">HOLY PAWFECT</span>
+                  <span className="text-[10px] font-black tracking-widest">Holy Pawfect Day</span>
                 </div>
                 <h1 className="text-lg font-black text-slate-850 tracking-tight mt-1 font-hand">🐾 好厉害宠物乐园结算单</h1>
                 <p className="text-[9px] text-slate-400 font-bold tracking-wider">NO: {bill.billNumber}</p>
@@ -700,30 +750,23 @@ export default function Receipt({ bill, customAlert, invoiceStyle = DEFAULT_INVO
 
                 {/* Items List */}
                 <div className="space-y-3 pt-2 border-t-2 border-slate-200">
-                  {bill.items.map((item) => {
+                  {bill.items.map((item, idx) => {
                     const hasDeduction = item.originalPrice !== undefined && item.price < item.originalPrice;
                     return (
-                      <div key={item.serviceId} className="grid grid-cols-12 text-xs text-slate-800 items-center">
+                      <div key={`${item.serviceId}-${idx}`} className="grid grid-cols-12 text-xs text-slate-800 items-center">
                         <span className="col-span-6 font-black text-slate-850 break-words pr-1">{item.name}</span>
                         <span className="col-span-3 text-right text-slate-500">
-                          {hasDeduction ? (
-                            <>
-                              <span className="line-through text-slate-300 mr-1">¥{item.originalPrice}</span>
-                              <span className="text-emerald-600 font-bold">¥{item.price}</span>
-                            </>
-                          ) : (
-                            `¥${item.price}`
-                          )}/{item.unit} <br />
+                          ¥{(item.originalPrice ?? item.price).toFixed(1)}/{item.unit} <br />
                           <span className="text-[10px] font-black text-slate-400">x{item.quantity}</span>
                         </span>
                         <span className="col-span-3 text-right font-black">
                           {hasDeduction && (
                             <div className="text-[10px] line-through text-slate-300 leading-none mb-0.5">
-                              ¥{(item.originalPrice! * item.quantity).toFixed(2)}
+                              ¥{(item.originalPrice! * item.quantity).toFixed(1)}
                             </div>
                           )}
                           <div className={hasDeduction ? 'text-emerald-600 leading-none' : 'text-slate-900 leading-none'}>
-                            ¥{(item.price * item.quantity).toFixed(2)}
+                            ¥{(item.price * item.quantity).toFixed(1)}
                           </div>
                         </span>
                       </div>
@@ -739,7 +782,7 @@ export default function Receipt({ bill, customAlert, invoiceStyle = DEFAULT_INVO
               <div className="space-y-2 text-xs text-slate-700 bg-white border-2 border-slate-800 p-3 rounded-2xl shadow-[2px_2px_0px_0px_#1A202C]">
                 <div className="flex justify-between text-slate-900 text-sm font-black">
                   <span>原价小计:</span>
-                  <span className="font-mono font-black text-slate-950">¥{bill.subtotal.toFixed(2)}</span>
+                  <span className="font-mono font-black text-slate-950">¥{bill.subtotal.toFixed(1)}</span>
                 </div>
                 <div className="flex justify-between text-slate-500 font-bold">
                   <span>会员折扣级别:</span>
@@ -758,7 +801,7 @@ export default function Receipt({ bill, customAlert, invoiceStyle = DEFAULT_INVO
                 {!bill.isHoliday && bill.isMemberDay && bill.memberDayDiscountAmount !== undefined && bill.memberDayDiscountAmount > 0 && (
                   <div className="flex justify-between text-sky-850 bg-[#B9E3F8]/30 border border-sky-400 px-2 py-1 rounded-xl mt-1 select-none font-bold text-[11px]">
                     <span>🎉 会员日享额外88折:</span>
-                    <span className="font-mono font-black text-sky-800">-¥{bill.memberDayDiscountAmount.toFixed(2)}</span>
+                    <span className="font-mono font-black text-sky-800">-¥{bill.memberDayDiscountAmount.toFixed(1)}</span>
                   </div>
                 )}
                 
@@ -827,47 +870,17 @@ export default function Receipt({ bill, customAlert, invoiceStyle = DEFAULT_INVO
                 {savings > 0 && (
                   <div className="flex justify-between text-emerald-700 text-sm font-black border-t border-dashed border-slate-200 pt-2 mt-1.5">
                     <span>尊享折扣累计:</span>
-                    <span className="font-mono">-¥{savings.toFixed(2)}</span>
+                    <span className="font-mono">-¥{savings.toFixed(1)}</span>
                   </div>
                 )}
                 <div className="border-t-2 border-slate-200 my-1"></div>
                 <div className="flex justify-between items-baseline pt-1">
                   <span className="text-slate-800 font-black text-xs">应收款项:</span>
                   <span className="text-xl font-black text-slate-900 font-mono">
-                    ¥{bill.total.toFixed(2)}
+                    ¥{bill.total.toFixed(1)}
                   </span>
                 </div>
               </div>
-
-              {/* Dotted separator */}
-              <div className="border-t-2 border-dashed border-slate-300"></div>
-
-              {/* Shared Family Card remaining tickets */}
-              {matchedFamilyAccount && (
-                <div className="text-[10px] text-slate-700 bg-slate-50 border-2 border-slate-800 p-3 rounded-2xl shadow-[2px_2px_0px_0px_#1A202C] space-y-1.5" id="receipt-family-assets-card">
-                  <div className="font-black text-slate-900 border-b border-slate-200 pb-1 flex items-center gap-1">
-                    <Gift className="w-3.5 h-3.5 text-rose-500" />
-                    <span>年卡家庭共享资产权益：</span>
-                  </div>
-                  <p className="font-black text-slate-800 leading-normal">
-                    该会员账号共计剩余：
-                  </p>
-                  <ul className="list-disc list-inside space-y-0.5 text-slate-700 font-bold pl-1">
-                    <li>全天日托券: <span className="font-mono text-slate-900">{matchedFamilyAccount.daycareCoupons.unused}张</span></li>
-                    <li>度假升级券: <span className="font-mono text-slate-900">{matchedFamilyAccount.holidayCoupons.unused}张</span></li>
-                    {matchedFamilyAccount.specialCareCoupons && (
-                      <li>陪护升级券: <span className="font-mono text-slate-900">{matchedFamilyAccount.specialCareCoupons.unused}张</span></li>
-                    )}
-                    <li>高端洗护券: <span className="font-mono text-slate-900">{matchedFamilyAccount.washCoupons.unused}张</span></li>
-                    {matchedFamilyAccount.transferCoupons && (
-                      <li>同城接送券: <span className="font-mono text-slate-900">{matchedFamilyAccount.transferCoupons.unused}张</span></li>
-                    )}
-                  </ul>
-                  <p className="text-[9px] text-slate-500 font-bold leading-tight mt-1">
-                    * 可供旗下宠物 {matchedFamilyAccount.pets.map((p: any) => p.name).join('、')} 共同使用
-                  </p>
-                </div>
-              )}
 
               {/* Footer friendly message */}
               <div className="text-center space-y-1.5 border-t-2 border-slate-200 pt-3.5">
@@ -975,19 +988,23 @@ export default function Receipt({ bill, customAlert, invoiceStyle = DEFAULT_INVO
 
               {/* Guest and Pet Details Metadata */}
               <div 
-                className="border border-slate-300 divide-y divide-slate-300 font-formal-header bg-white"
-                style={{ fontSize: `${invoiceStyle.fontSizeHeader}px`, lineHeight: 0.9 }}
+                className="border border-slate-300 divide-y divide-slate-300 bg-white font-formal-header"
+                style={{ 
+                  fontSize: `${invoiceStyle.fontSizeHeader}px`, 
+                  lineHeight: 1.2,
+                  fontFamily: invoiceStyle.fontFamilyHeader || '"Microsoft YaHei", "微软雅黑", system-ui, sans-serif'
+                }}
               >
                 {/* Row 1: PET NAME / ARRIVAL */}
                 <div className="flex flex-nowrap divide-x divide-slate-300 bg-white">
-                  <div className="bg-white px-3 py-1.5 font-bold text-slate-700 flex items-center shrink-0 whitespace-nowrap" style={{ width: '150px' }}>
+                  <div className="bg-slate-50/50 px-3 py-1.5 font-bold text-slate-700 flex items-center shrink-0 whitespace-nowrap" style={{ width: '150px' }}>
                     宝贝姓名 PET NAME
                   </div>
                   <div className="px-5 py-1.5 font-black text-slate-900 flex items-center shrink-0 whitespace-nowrap">
                     {bill.dogName}
                   </div>
                   <div className="flex-1 bg-white"></div>
-                  <div className="bg-white px-3 py-1.5 font-bold text-slate-700 flex items-center shrink-0 whitespace-nowrap" style={{ width: '150px' }}>
+                  <div className="bg-slate-50/50 px-3 py-1.5 font-bold text-slate-700 flex items-center shrink-0 whitespace-nowrap" style={{ width: '150px' }}>
                     入住时间 ARRIVAL
                   </div>
                   <div className="px-5 py-1.5 font-mono font-black text-slate-900 flex items-center shrink-0 whitespace-nowrap" style={{ width: '150px' }}>
@@ -997,14 +1014,14 @@ export default function Receipt({ bill, customAlert, invoiceStyle = DEFAULT_INVO
                 
                 {/* Row 2: BREED / DEPARTURE */}
                 <div className="flex flex-nowrap divide-x divide-slate-300 bg-white">
-                  <div className="bg-white px-3 py-1.5 font-bold text-slate-700 flex items-center shrink-0 whitespace-nowrap" style={{ width: '150px' }}>
+                  <div className="bg-slate-50/50 px-3 py-1.5 font-bold text-slate-700 flex items-center shrink-0 whitespace-nowrap" style={{ width: '150px' }}>
                     宝贝品种 BREED
                   </div>
                   <div className="px-5 py-1.5 font-black text-slate-900 flex items-center shrink-0 whitespace-nowrap">
                     {bill.dogBreed || '未知品种'}
                   </div>
                   <div className="flex-1 bg-white"></div>
-                  <div className="bg-white px-3 py-1.5 font-bold text-slate-700 flex items-center shrink-0 whitespace-nowrap" style={{ width: '150px' }}>
+                  <div className="bg-slate-50/50 px-3 py-1.5 font-bold text-slate-700 flex items-center shrink-0 whitespace-nowrap" style={{ width: '150px' }}>
                     退房日期 DEPARTURE
                   </div>
                   <div className="px-5 py-1.5 font-mono font-black text-slate-900 flex items-center shrink-0 whitespace-nowrap" style={{ width: '150px' }}>
@@ -1014,18 +1031,18 @@ export default function Receipt({ bill, customAlert, invoiceStyle = DEFAULT_INVO
 
                 {/* Row 3: MEMBERSHIP */}
                 <div className="flex flex-nowrap divide-x divide-slate-300 bg-white">
-                  <div className="bg-white px-3 py-1.5 font-bold text-slate-700 flex items-center shrink-0 whitespace-nowrap" style={{ width: '150px' }}>
+                  <div className="bg-slate-50/50 px-3 py-1.5 font-bold text-slate-700 flex items-center shrink-0 whitespace-nowrap" style={{ width: '150px' }}>
                     会员类型 MEMBERSHIP
                   </div>
                   <div className="px-5 py-1.5 font-black text-slate-900 flex items-center shrink-0 whitespace-nowrap">
                     {bill.isMember ? (
-                      <span className="text-sky-800 font-black">{bill.memberTypeName}</span>
+                      <span className="text-sky-850 font-black">{bill.memberTypeName}</span>
                     ) : (
-                      <span className="text-slate-500">非会员 (GUEST)</span>
+                      <span className="text-slate-400 font-bold">非会员</span>
                     )}
                   </div>
                   <div className="flex-1 bg-white"></div>
-                  <div className="bg-white px-3 py-1.5 font-bold text-slate-700 flex items-center shrink-0 whitespace-nowrap" style={{ width: '150px' }}>
+                  <div className="bg-slate-50/50 px-3 py-1.5 font-bold text-slate-700 flex items-center shrink-0 whitespace-nowrap" style={{ width: '150px' }}>
                     &nbsp;
                   </div>
                   <div className="bg-white px-5 py-1.5 font-mono font-black text-slate-900 flex items-center shrink-0 whitespace-nowrap" style={{ width: '150px' }}>
@@ -1048,84 +1065,96 @@ export default function Receipt({ bill, customAlert, invoiceStyle = DEFAULT_INVO
                       }}
                       className="border-b border-slate-300 text-xs font-bold uppercase"
                     >
-                      <th className="p-3 border-r border-slate-300 text-center w-[110px] date-cell-bg-match">日期 DATE</th>
-                      <th className="p-3 border-r border-slate-300 text-center">消费项目 DETAILS</th>
-                      <th className="p-3 border-r border-slate-300 text-center w-[180px]">备注 REFERENCE</th>
-                      <th className="p-3 border-r border-slate-300 text-center w-[75px]">数量 NO.</th>
-                      <th className="p-3 border-r border-slate-300 text-center w-[95px]">单价 PRICE</th>
-                      <th className="p-3 border-r border-slate-300 text-center w-[95px]">折扣 DISCOUNT</th>
+                      <th className="p-3 border-r border-slate-300 text-center w-[110px] date-cell-bg-match whitespace-nowrap">日期 DATE</th>
+                      <th className="p-3 border-r text-center" style={{ borderRightColor: invoiceStyle.tableHeaderBg }}>消费项目 DETAILS</th>
+                      <th className="p-3 border-r text-center w-[180px]" style={{ borderRightColor: invoiceStyle.tableHeaderBg }}>备注 REFERENCE</th>
+                      <th className="p-3 border-r text-center w-[75px]" style={{ borderRightColor: invoiceStyle.tableHeaderBg }}>数量 NO.</th>
+                      <th className="p-3 border-r text-center w-[95px]" style={{ borderRightColor: invoiceStyle.tableHeaderBg }}>单价 PRICE</th>
+                      <th className="p-3 border-r text-center w-[95px]" style={{ borderRightColor: invoiceStyle.tableHeaderBg }}>折扣 DISCOUNT</th>
                       <th className="p-3 text-center w-[110px]">消费金额 AMOUNT</th>
                     </tr>
                   </thead>
                   <tbody 
                     className="divide-y divide-slate-300 text-xs"
-                    style={{ fontSize: `${invoiceStyle.fontSizeTable}px` }}
+                    style={{ fontSize: '12px' }}
                   >
                     {(() => {
                       const couponDeductedSum = bill.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
                       const generalDiscountFactor = couponDeductedSum > 0 ? (bill.total / couponDeductedSum) : 1.0;
 
                       return bill.items.map((item, idx) => {
-                        // Deduce reference comment and discount label
+                        // Deduce reference comment and discount label from the item-level choices
                         let reference = '标准项目 (Standard)';
                         let discountLabel = '原价';
 
-                        const getCouponQty = (val: boolean | number | undefined): number => {
-                          if (val === undefined) return 0;
-                          if (typeof val === 'number') return val;
-                          return val ? 1 : 0;
-                        };
-                        
-                        const daycareQty = getCouponQty(bill.useDaycareCoupon);
-                        const boardingQty = getCouponQty(bill.useBoardingUpgradeCoupon);
-                        const specialCareQty = getCouponQty(bill.useSpecialCareUpgradeCoupon);
-                        const washQty = getCouponQty(bill.useWashUpgradeCoupon);
-                        const transferQty = getCouponQty(bill.useTransferCoupon);
-                        const dentalQty = getCouponQty(bill.useDentalCoupon);
-
-                        const isDaycare = item.name.includes('日托');
-                        const isBoarding = item.name.includes('寄养') || item.name.includes('房');
-                        const isWash = item.name.includes('洗护') || item.name.includes('洗浴');
-                        const isTransfer = item.name.includes('接送') || item.name.includes('接') || item.name.includes('送');
-                        const isDental = item.name.includes('洁牙') || item.name.includes('牙');
-
-                        if (daycareQty > 0 && isDaycare) {
+                        const coupon = item.appliedCoupon || 'none';
+                        if (coupon === 'daycare') {
                           reference = '使用会员日托券抵扣';
                           discountLabel = '免费兑换';
-                        } else if (boardingQty > 0 && isBoarding) {
+                        } else if (coupon === 'boarding') {
                           reference = '房型升级券免费升级';
                           discountLabel = '免费升级';
-                        } else if (specialCareQty > 0 && isBoarding && item.name.includes('陪护')) {
+                        } else if (coupon === 'special_care') {
                           reference = '陪护房升级券抵扣';
                           discountLabel = '免费升级';
-                        } else if (washQty > 0 && isWash) {
+                        } else if (coupon === 'wash') {
                           reference = '高端洗护升级券抵扣';
                           discountLabel = '免费升级';
-                        } else if (transferQty > 0 && isTransfer) {
+                        } else if (coupon === 'transfer') {
                           reference = '10km接送抵用券抵扣';
                           discountLabel = '免费兑换';
-                        } else if (dentalQty > 0 && isDental) {
+                        } else if (coupon === 'dental') {
                           reference = '高端洁牙抵扣券抵扣';
                           discountLabel = '免除费用';
                         } else if (bill.isHoliday) {
                           reference = '🏮 法定节假日价';
                           discountLabel = '无折扣';
                         } else {
-                          // Normal discount
-                          if (item.originalPrice && item.price < item.originalPrice) {
-                            const ratio = item.price / item.originalPrice;
-                            const discountPercent = Math.round(ratio * 100);
-                            if (discountPercent === 88) {
-                              reference = bill.isMemberDay ? '🎉 专属会员日额外88折' : '88折专享价';
-                              discountLabel = '8.8折';
-                            } else {
-                              discountLabel = `${(discountPercent / 10).toFixed(discountPercent % 10 === 0 ? 0 : 1)}折`;
-                              reference = '会员专属折扣';
-                            }
-                          } else {
+                          const preset = item.discountPreset || '原价';
+                          if (preset === '88折') {
+                            reference = bill.isMemberDay ? '🎉 专属会员日额外88折' : '88折专享价';
+                            discountLabel = '8.8折';
+                          } else if (preset === '8折') {
+                            reference = '会员专属8折';
+                            discountLabel = '8折';
+                          } else if (preset === '7折') {
+                            reference = '会员特惠7折';
+                            discountLabel = '7折';
+                          } else if (preset === '6折') {
+                            reference = '会员特惠6折';
+                            discountLabel = '6折';
+                          } else if (preset === '自定') {
+                            const val = item.customDiscountValue || 10;
+                            reference = '自定义折扣';
+                            discountLabel = val === 10 ? '原价' : (val <= 10 ? `${val}折` : `${val}%`);
+                          } else if (preset === '大众点评') {
+                            reference = '大众点评专属特惠';
+                            discountLabel = '大众点评价';
+                          } else if (preset === '原价') {
+                            discountLabel = '原价';
                             if (bill.isMember && bill.discount < 1.0) {
                               discountLabel = `${(bill.discount * 10).toFixed(1)}折`;
                               reference = '会员特惠价';
+                            }
+                          } else {
+                            // Backup fallback calculation if original price is specified
+                            if (item.originalPrice && item.price < item.originalPrice) {
+                              const ratio = item.price / item.originalPrice;
+                              const discountPercent = Math.round(ratio * 100);
+                              if (discountPercent === 88) {
+                                reference = bill.isMemberDay ? '🎉 专属会员日额外88折' : '88折专享价';
+                                discountLabel = '8.8折';
+                              } else if (discountPercent === 100) {
+                                discountLabel = '原价';
+                              } else {
+                                discountLabel = `${(discountPercent / 10).toFixed(discountPercent % 10 === 0 ? 0 : 1)}折`;
+                                reference = '会员专属折扣';
+                              }
+                            } else {
+                              if (bill.isMember && bill.discount < 1.0) {
+                                discountLabel = `${(bill.discount * 10).toFixed(1)}折`;
+                                reference = '会员特惠价';
+                              }
                             }
                           }
                         }
@@ -1135,28 +1164,28 @@ export default function Receipt({ bill, customAlert, invoiceStyle = DEFAULT_INVO
 
                         return (
                           <tr key={idx} className="hover:bg-slate-50/50">
-                            <td className="p-3 border-r border-slate-300 font-mono text-slate-500 text-center date-cell-bg-match">
-                              {formatDateToSlash(bill.checkInDate || formattedDate)}
+                            <td className="p-3 border-r border-slate-300 font-mono text-slate-500 text-center align-middle date-cell-bg-match whitespace-nowrap">
+                              {formatDateToSlash(item.date || bill.checkInDate || formattedDate)}
                             </td>
-                            <td className="p-3 border-r border-slate-300 font-bold text-slate-900">
+                            <td className="p-3 border-r border-slate-300 font-bold text-slate-900 text-center align-middle">
                               {item.name}
                             </td>
-                            <td className="p-3 border-r border-slate-300 text-slate-600 font-medium text-[11px]">
+                            <td className="p-3 border-r border-slate-300 text-slate-600 font-medium text-[11px] text-center align-middle">
                               {reference}
                             </td>
-                            <td className="p-3 border-r border-slate-300 text-center font-bold">
+                            <td className="p-3 border-r border-slate-300 text-center align-middle font-bold">
                               {item.quantity} {item.unit}
                             </td>
-                            <td className="p-3 border-r border-slate-300 text-right font-mono font-bold text-slate-600">
-                              ¥{finalLineUnitPrice.toFixed(2)}
+                            <td className="p-3 border-r border-slate-300 text-center align-middle font-mono font-bold text-slate-600">
+                              ¥{(item.originalPrice ?? item.price).toFixed(1)}
                             </td>
-                            <td className={`p-3 border-r border-slate-300 text-center font-bold ${
+                            <td className={`p-3 border-r border-slate-300 text-center align-middle font-bold ${
                               discountLabel !== '原价' && discountLabel !== '无折扣' ? 'text-emerald-700' : 'text-slate-400'
                             }`}>
                               {discountLabel}
                             </td>
-                            <td className="p-3 text-right font-mono font-black text-slate-900">
-                              ¥{finalLineAmount.toFixed(2)}
+                            <td className="p-3 text-center align-middle font-mono font-black text-slate-900">
+                              ¥{finalLineAmount.toFixed(1)}
                             </td>
                           </tr>
                         );
@@ -1178,17 +1207,17 @@ export default function Receipt({ bill, customAlert, invoiceStyle = DEFAULT_INVO
 
                     {/* Total row - Colored yellow and borders match yellow */}
                     <tr className="font-black total-row-yellow">
-                      <td colSpan={4} className="p-3.5 text-right text-slate-800 font-black uppercase tracking-wider text-[11px]">
+                      <td colSpan={4} className="p-3.5">&nbsp;</td>
+                      <td className="p-3.5 text-center align-middle text-slate-800 font-black uppercase tracking-wider text-[11px]">
                         总计 TOTAL
                       </td>
                       <td className="p-3.5">&nbsp;</td>
-                      <td className="p-3.5">&nbsp;</td>
                       <td 
-                        className="p-3.5 text-right font-mono text-slate-900 font-black"
-                        style={{ fontSize: `${invoiceStyle.fontSizeTable}px` }}
+                        className="p-3.5 text-center align-middle font-mono text-slate-900 font-black"
+                        style={{ fontSize: '12px' }}
                       >
                         <span>
-                          ¥{bill.total.toFixed(2)}
+                          ¥{bill.total.toFixed(1)}
                         </span>
                       </td>
                     </tr>
@@ -1220,21 +1249,34 @@ export default function Receipt({ bill, customAlert, invoiceStyle = DEFAULT_INVO
                 </div>
 
                 {/* Sticky Note / Instructions Block with Top Underline Separator and transparent bg */}
-                {showRemarks && (
+                {(bill.isMember || usedCouponsList.length > 0) && (
                   <div 
-                    className="space-y-1.5 text-center sm:text-left bg-white"
+                    className="space-y-2 text-left bg-white text-slate-800"
                     style={{
                       marginTop: `${invoiceStyle.remarksDividerSpacing ?? 20}px`,
                       paddingTop: invoiceStyle.showRemarksDivider ? `${invoiceStyle.remarksDividerSpacing ?? 20}px` : '0px',
                       borderTop: invoiceStyle.showRemarksDivider ? `1px solid ${invoiceStyle.tableBorderColor || '#CBD5E1'}` : 'none'
                     }}
                   >
-                    <p className="text-xs text-slate-800 font-black leading-tight">
-                      备注: 入住时间当天下午2点后，离园时间次日下午2点前
-                    </p>
-                    <p className="text-[10px] text-slate-500 font-bold leading-tight">
-                      NOTE: Earliest check-in is available from 2:00 PM on arrival date, with latest check-out by 2:00 PM on the day of departure.
-                    </p>
+                    <div className="font-black text-slate-900 text-xs tracking-wider border-b border-slate-200 pb-1 mb-1.5 uppercase">
+                      备注 / REMARKS:
+                    </div>
+                    {bill.isMember && (
+                      <div className="text-slate-800 leading-normal text-[11px] font-bold flex flex-wrap gap-1">
+                        <span className="font-black text-slate-900">【会员折扣 MEMBER DISCOUNT】:</span>
+                        <span>
+                          已享受【{bill.memberTypeName || '年卡会员'}】专属折上折优惠（主折扣率: {Math.round(bill.discount * 100)}% / {(bill.discount * 10).toFixed(1)}折）{bill.isMemberDay ? '，叠享会员日额外 8.8 折' : ''}。
+                        </span>
+                      </div>
+                    )}
+                    {usedCouponsList.length > 0 && (
+                      <div className="text-slate-800 leading-normal text-[11px] font-bold flex flex-wrap gap-1 mt-1.5">
+                        <span className="font-black text-emerald-700">【年卡抵扣券权益 ANNUAL COUPON BENEFIT】:</span>
+                        <span>
+                          本次结账已成功抵扣年卡尊享券权益：{usedCouponsList.join('、')}。
+                        </span>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

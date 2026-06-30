@@ -932,6 +932,7 @@ export default function InvoiceStyleEditor({
                 customAlert={customAlert} 
                 invoiceStyle={invoiceStyle}
                 defaultMode="invoice"
+                showInvoiceToggle={true}
               />
             </div>
           </div>

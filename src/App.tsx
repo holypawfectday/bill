@@ -11,7 +11,6 @@ import BillForm from './components/BillForm';
 import ServiceSettings from './components/ServiceSettings';
 import Receipt from './components/Receipt';
 import HistoryList from './components/HistoryList';
-import InvoiceStyleEditor from './components/InvoiceStyleEditor';
 import { PawPrint, Settings, Receipt as ReceiptIcon, Calendar, CheckSquare, PlusCircle, BarChart3, Clock, Sparkles } from 'lucide-react';
 import { CutePuppyHead, PinkHeart, BlueSparkle, YellowSparkle, HolyPawfectPuppy, HolyPawfectLogo } from './components/CuteDoodles';
 import { downloadCSV } from './utils/export';
@@ -19,20 +18,35 @@ import { downloadCSV } from './utils/export';
 export default function App() {
   // --- States ---
   const [services, setServices] = useState<ServiceItem[]>(() => {
+    let rawServices = DEFAULT_SERVICES;
     const local = localStorage.getItem('pet_paradise_services_v3');
     if (local) {
       try {
         const parsed = JSON.parse(local) as ServiceItem[];
         // Auto-upgrade if any service lacks the newly added subCategory field
         const needsUpgrade = parsed.some((s) => !s.subCategory);
-        if (!needsUpgrade) {
-          return parsed;
+        const needsSpUpgrade = parsed.some((s) => s.id.startsWith('srv_mr_sp_') && s.category !== '专项服务');
+        if (!needsUpgrade && !needsSpUpgrade) {
+          rawServices = parsed;
+        } else {
+          rawServices = parsed.map((s) => {
+            const updated = { ...s };
+            if (s.id.startsWith('srv_mr_sp_') && s.category !== '专项服务') {
+              updated.category = '专项服务';
+            }
+            return updated;
+          });
         }
       } catch (e) {
         console.error('Failed to parse local services:', e);
       }
     }
-    return DEFAULT_SERVICES;
+    const seen = new Set<string>();
+    return rawServices.filter((s) => {
+      if (seen.has(s.id)) return false;
+      seen.add(s.id);
+      return true;
+    });
   });
 
   const [memberships, setMemberships] = useState<MemberType[]>(() => {
@@ -63,10 +77,14 @@ export default function App() {
       }
     }
 
-    return mergedRaw.map((acc: any) => ({
-      ...acc,
-      memberId: getNormalizedId(acc.memberId)
-    }));
+    return mergedRaw
+      .map((acc: any) => ({
+        ...acc,
+        memberId: getNormalizedId(acc.memberId)
+      }))
+      .filter(
+        (acc: any) => acc.memberId !== '000000000001' && acc.memberId !== '000000000002'
+      );
   });
 
   const [bills, setBills] = useState<Bill[]>(() => {
@@ -142,9 +160,11 @@ export default function App() {
   const [selectedBill, setSelectedBill] = useState<Bill | null>(null);
 
   // Auto-select the first bill on initial load if none is selected
+  const hasAutoSelectedRef = React.useRef(false);
   useEffect(() => {
-    if (bills.length > 0 && !selectedBill) {
+    if (bills.length > 0 && !selectedBill && !hasAutoSelectedRef.current) {
       setSelectedBill(bills[0]);
+      hasAutoSelectedRef.current = true;
     }
   }, [bills, selectedBill]);
   const [logoError, setLogoError] = useState(false);
@@ -259,6 +279,28 @@ export default function App() {
     }
   };
 
+  // Delete all bills
+  const handleDeleteAllBills = async () => {
+    if (bills.length === 0) {
+      if (customAlert) {
+        await customAlert('当前没有任何账单记录！');
+      } else {
+        alert('当前没有任何账单记录！');
+      }
+      return;
+    }
+    const confirmed = await customConfirm('⚠️ 警告：您确认要彻底删除“全部”账单记录吗？此操作将无法撤销，所有历史流水将全部清空！', '确认清空全部账单');
+    if (confirmed) {
+      setBills([]);
+      setSelectedBill(null);
+      setLastDeletedBill(null);
+      setDeletedBillIndex(null);
+      if (customAlert) {
+        await customAlert('已成功清空全部历史账单记录！');
+      }
+    }
+  };
+
   // Undo the deletion of the last deleted bill
   const handleUndoDelete = () => {
     if (lastDeletedBill) {
@@ -358,6 +400,19 @@ export default function App() {
           </button>
 
           <button
+            onClick={() => setActiveTab('invoice_design')}
+            className={`flex items-center gap-2 py-2 px-4 text-xs font-black rounded-xl transition-all duration-150 cursor-pointer border-2 ${
+              activeTab === 'invoice_design'
+                ? 'bg-[#B9E3F8] text-slate-900 border-slate-800 shadow-[2px_2px_0px_0px_#1A202C]'
+                : 'bg-white hover:bg-slate-50 text-slate-600 border-slate-300 hover:border-slate-800 hover:shadow-[1px_1px_0px_0px_#1A202C]'
+            }`}
+            id="nav-tab-invoice-design"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-[#EBA53B]" />
+            正式账单格式
+          </button>
+
+          <button
             onClick={() => setActiveTab('history')}
             className={`flex items-center gap-2 py-2 px-4 text-xs font-black rounded-xl transition-all duration-150 cursor-pointer border-2 ${
               activeTab === 'history'
@@ -382,25 +437,12 @@ export default function App() {
             <Settings className="w-3.5 h-3.5 text-slate-800" />
             价格与会员配置
           </button>
-
-          <button
-            onClick={() => setActiveTab('invoice_design')}
-            className={`flex items-center gap-2 py-2 px-4 text-xs font-black rounded-xl transition-all duration-150 cursor-pointer border-2 ${
-              activeTab === 'invoice_design'
-                ? 'bg-[#B9E3F8] text-slate-900 border-slate-800 shadow-[2px_2px_0px_0px_#1A202C]'
-                : 'bg-white hover:bg-slate-50 text-slate-600 border-slate-300 hover:border-slate-800 hover:shadow-[1px_1px_0px_0px_#1A202C]'
-            }`}
-            id="nav-tab-invoice-design"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-[#EBA53B]" />
-            正式账单格式
-          </button>
         </div>
       </nav>
 
       {/* 🖥️ Main Dashboard Workspace */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6" id="app-main-workspace">
-        {activeTab === 'cashier' && (
+        <div className={activeTab === 'cashier' ? '' : 'hidden'} id="tab-content-cashier">
           <BillForm
             services={services}
             memberships={memberships}
@@ -414,22 +456,23 @@ export default function App() {
             customConfirm={customConfirm}
             invoiceStyle={invoiceStyle}
           />
-        )}
+        </div>
 
-        {activeTab === 'history' && (
+        <div className={activeTab === 'history' ? '' : 'hidden'} id="tab-content-history">
           <HistoryList
             bills={bills}
             onSelectBill={handleSelectBillFromHistory}
             onDeleteBill={handleDeleteBill}
+            onDeleteAllBills={handleDeleteAllBills}
             selectedBillId={selectedBill?.id}
             lastDeletedBill={lastDeletedBill}
             onUndoDelete={handleUndoDelete}
             customAlert={customAlert}
             customConfirm={customConfirm}
           />
-        )}
+        </div>
 
-        {activeTab === 'settings' && (
+        <div className={activeTab === 'settings' ? '' : 'hidden'} id="tab-content-settings">
           <ServiceSettings
             services={services}
             setServices={setServices}
@@ -441,28 +484,44 @@ export default function App() {
             customAlert={customAlert}
             customConfirm={customConfirm}
           />
-        )}
+        </div>
 
-        {activeTab === 'invoice_design' && (
-          <InvoiceStyleEditor
-            invoiceStyle={invoiceStyle}
-            setInvoiceStyle={setInvoiceStyle}
-            bills={bills}
-            customAlert={customAlert}
-          />
-        )}
+        <div className={activeTab === 'invoice_design' ? '' : 'hidden'} id="tab-content-invoice-design">
+          <div className="bg-white border-4 border-slate-800 rounded-3xl p-6 shadow-[6px_6px_0px_0px_#1A202C] space-y-4">
+            {(() => {
+              const previewBill = bills.length > 0 ? bills[0] : null;
+              return previewBill ? (
+                <div className="w-full flex justify-center bg-slate-50 border-4 border-dashed border-slate-300 rounded-3xl p-6 overflow-x-auto">
+                  <div className="min-w-max">
+                    <Receipt 
+                      bill={previewBill} 
+                      customAlert={customAlert} 
+                      invoiceStyle={invoiceStyle}
+                      defaultMode="invoice"
+                      showInvoiceToggle={false}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="border-4 border-dashed border-slate-300 bg-white rounded-3xl p-12 text-center space-y-3">
+                  <p className="text-xs text-slate-800 font-black">请在收银台生成或选择一笔账单查看预览</p>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
       </main>
 
       {/* 🐾 Footer credits */}
       <footer className="bg-white border-t-4 border-slate-800 py-5 text-center text-xs text-slate-500 font-bold no-print" id="app-footer-credits">
         <div className="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row justify-between items-center gap-2">
-          <p className="font-sans">© 2026 好厉害宠物乐园 · 萌宠至上，让陪伴更有温度</p>
+          <p className="font-sans">© 2026 好厉害宠物乐园</p>
           <div className="flex gap-4 uppercase font-black text-[10px] text-slate-700">
-            <span>🐾 舒适温馨 </span>
+            <span>🐾 日托寄养 </span>
             <span>·</span>
-            <span> 阳光度假 </span>
+            <span> 洗护美容 </span>
             <span>·</span>
-            <span> 专业陪护</span>
+            <span> 训练接送</span>
           </div>
         </div>
       </footer>

@@ -1,29 +1,6 @@
 import { MemberAssetAccount } from '../types';
 
 const UNPADDED_INITIAL_MEMBER_ASSETS: MemberAssetAccount[] = [
-  // 👑 铂金年卡会员 (最高级)
-  {
-    memberId: '1',
-    pets: [{ name: '奥利奥' }, { name: '雪球' }],
-    tier: '铂金年卡👑',
-    validityStart: '2026-06-01',
-    validityEnd: '2027-06-01',
-    daycareCoupons: { total: 1, unused: 1, used: 0 },
-    holidayCoupons: { total: 0, unused: 0, used: 0 },
-    washCoupons: { total: 1, unused: 1, used: 0 },
-    transferCoupons: { total: 3, unused: 3, used: 0 }
-  },
-  {
-    memberId: '2',
-    pets: [{ name: '可乐' }],
-    tier: '铂金年卡👑',
-    validityStart: '2026-05-15',
-    validityEnd: '2027-05-15',
-    daycareCoupons: { total: 1, unused: 1, used: 0 },
-    holidayCoupons: { total: 0, unused: 0, used: 0 },
-    washCoupons: { total: 1, unused: 1, used: 0 },
-    transferCoupons: { total: 3, unused: 3, used: 0 }
-  },
   {
     memberId: '53',
     pets: [{ name: '奶酪' }],

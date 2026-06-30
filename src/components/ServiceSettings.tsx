@@ -91,7 +91,7 @@ export default function ServiceSettings({
   const [newServiceUnit, setNewServiceUnit] = useState('次');
   const [newServiceCategory, setNewServiceCategory] = useState('日托');
 
-  const categories = ['日托', '寄养', '洗护', '美容', '训练', '接送'];
+  const categories = ['日托', '寄养', '洗护', '美容', '专项服务', '训练', '接送'];
 
   const [saving, setSaving] = useState(false);
 

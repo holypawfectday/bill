@@ -2,9 +2,9 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Fredoka", "Mali", "ZCOOL KuaiLe", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-sans: "Microsoft YaHei", "微软雅黑", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-hand: "Mali", "ZCOOL KuaiLe", cursive;
-  --font-formal: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", sans-serif;
+  --font-formal: "Microsoft YaHei", "微软雅黑", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
 /* Custom hand-drawn card styles and cute doodles */

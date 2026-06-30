@@ -140,28 +140,28 @@ export const DEFAULT_SERVICES: ServiceItem[] = [
   { id: 'srv_mr_c8_1', category: '美容', subCategory: '猫猫美容', name: '猫猫美容 (8kg以上 全身剃剪 不含洗护)', price: 240, unit: '次' },
   { id: 'srv_mr_c8_2', category: '美容', subCategory: '猫猫美容', name: '猫猫美容 (8kg以上 全身手剪 不含洗护)', price: 360, unit: '次' },
 
-  // 专项护理
-  { id: 'srv_mr_sp_1', category: '美容', subCategory: '狗狗专项护理', name: '局部修剪', price: 100, unit: '次' },
-  { id: 'srv_mr_sp_2', category: '美容', subCategory: '狗狗专项护理', name: '剪指甲', price: 38, unit: '次' },
-  { id: 'srv_mr_sp_3', category: '美容', subCategory: '狗狗专项护理', name: '刷牙', price: 28, unit: '次' },
-  { id: 'srv_mr_sp_4', category: '美容', subCategory: '狗狗专项护理', name: '爱心屁股', price: 150, unit: '次' },
-  { id: 'srv_mr_sp_5', category: '美容', subCategory: '狗狗专项护理', name: '耳道清理', price: 28, unit: '次' },
-  { id: 'srv_mr_sp_6', category: '美容', subCategory: '狗狗专项护理', name: '剃贵宾脚', price: 48, unit: '次' },
-  { id: 'srv_mr_sp_7', category: '美容', subCategory: '狗狗专项护理', name: '开结 15分钟', price: 68, unit: '次' },
-  { id: 'srv_mr_sp_8', category: '美容', subCategory: '狗狗专项护理', name: '单独修头', price: 150, unit: '次' },
-  { id: 'srv_mr_sp_9', category: '美容', subCategory: '狗狗专项护理', name: '开荒拔毛', price: 1088, unit: '次' },
-  { id: 'srv_mr_sp_10', category: '美容', subCategory: '狗狗专项护理', name: '循环拔毛', price: 788, unit: '次' },
-  { id: 'srv_mr_sp_11', category: '美容', subCategory: '狗狗专项护理', name: '梗犬单独做头', price: 200, unit: '次' },
-  { id: 'srv_mr_sp_12', category: '美容', subCategory: '狗狗专项护理', name: '除底绒/狗', price: 158, unit: '次' },
-  { id: 'srv_mr_sp_13', category: '美容', subCategory: '猫猫专项护理', name: '去黑下巴/猫', price: 38, unit: '次' },
-  { id: 'srv_mr_sp_14', category: '美容', subCategory: '猫猫专项护理', name: '去油尾/猫', price: 68, unit: '次' },
-  { id: 'srv_mr_sp_15', category: '美容', subCategory: '猫猫专项护理', name: '自带药浴/猫', price: 38, unit: '次' },
-  { id: 'srv_mr_sp_16', category: '美容', subCategory: '猫猫专项护理', name: '除底绒/猫', price: 98, unit: '次' },
-  { id: 'srv_mr_sp_17', category: '美容', subCategory: '猫猫专项护理', name: '全身去油/猫', price: 168, unit: '次' },
-  { id: 'srv_mr_sp_18', category: '美容', subCategory: '猫猫专项护理', name: '药浴/猫', price: 98, unit: '次' },
-  { id: 'srv_mr_sp_19', category: '美容', subCategory: '狗狗专项护理', name: '牙结石 轻度', price: 488, unit: '次' },
-  { id: 'srv_mr_sp_20', category: '美容', subCategory: '狗狗专项护理', name: '牙结石 中度', price: 688, unit: '次' },
-  { id: 'srv_mr_sp_21', category: '美容', subCategory: '狗狗专项护理', name: '牙结石 重度', price: 888, unit: '次' },
+  // 专项服务
+  { id: 'srv_mr_sp_1', category: '专项服务', subCategory: '狗狗专项护理', name: '局部修剪', price: 100, unit: '次' },
+  { id: 'srv_mr_sp_2', category: '专项服务', subCategory: '狗狗专项护理', name: '剪指甲', price: 38, unit: '次' },
+  { id: 'srv_mr_sp_3', category: '专项服务', subCategory: '狗狗专项护理', name: '刷牙', price: 28, unit: '次' },
+  { id: 'srv_mr_sp_4', category: '专项服务', subCategory: '狗狗专项护理', name: '爱心屁股', price: 150, unit: '次' },
+  { id: 'srv_mr_sp_5', category: '专项服务', subCategory: '狗狗专项护理', name: '耳道清理', price: 28, unit: '次' },
+  { id: 'srv_mr_sp_6', category: '专项服务', subCategory: '狗狗专项护理', name: '剃贵宾脚', price: 48, unit: '次' },
+  { id: 'srv_mr_sp_7', category: '专项服务', subCategory: '狗狗专项护理', name: '开结 15分钟', price: 68, unit: '次' },
+  { id: 'srv_mr_sp_8', category: '专项服务', subCategory: '狗狗专项护理', name: '单独修头', price: 150, unit: '次' },
+  { id: 'srv_mr_sp_9', category: '专项服务', subCategory: '狗狗专项护理', name: '开荒拔毛', price: 1088, unit: '次' },
+  { id: 'srv_mr_sp_10', category: '专项服务', subCategory: '狗狗专项护理', name: '循环拔毛', price: 788, unit: '次' },
+  { id: 'srv_mr_sp_11', category: '专项服务', subCategory: '狗狗专项护理', name: '梗犬单独做头', price: 200, unit: '次' },
+  { id: 'srv_mr_sp_12', category: '专项服务', subCategory: '狗狗专项护理', name: '除底绒/狗', price: 158, unit: '次' },
+  { id: 'srv_mr_sp_13', category: '专项服务', subCategory: '猫猫专项护理', name: '去黑下巴/猫', price: 38, unit: '次' },
+  { id: 'srv_mr_sp_14', category: '专项服务', subCategory: '猫猫专项护理', name: '去油尾/猫', price: 68, unit: '次' },
+  { id: 'srv_mr_sp_15', category: '专项服务', subCategory: '猫猫专项护理', name: '自带药浴/猫', price: 38, unit: '次' },
+  { id: 'srv_mr_sp_16', category: '专项服务', subCategory: '猫猫专项护理', name: '除底绒/猫', price: 98, unit: '次' },
+  { id: 'srv_mr_sp_17', category: '专项服务', subCategory: '猫猫专项护理', name: '全身去油/猫', price: 168, unit: '次' },
+  { id: 'srv_mr_sp_18', category: '专项服务', subCategory: '猫猫专项护理', name: '药浴/猫', price: 98, unit: '次' },
+  { id: 'srv_mr_sp_19', category: '专项服务', subCategory: '狗狗专项护理', name: '牙结石 轻度', price: 488, unit: '次' },
+  { id: 'srv_mr_sp_20', category: '专项服务', subCategory: '狗狗专项护理', name: '牙结石 中度', price: 688, unit: '次' },
+  { id: 'srv_mr_sp_21', category: '专项服务', subCategory: '狗狗专项护理', name: '牙结石 重度', price: 888, unit: '次' },
 
   // === 训练 ===
   { id: 'srv_xl_1', category: '训练', subCategory: '行为训练课程', name: '上门亲子课训练课程 (赠送7天线上跟进)', price: 1600, unit: '90分钟' },
@@ -196,16 +196,16 @@ export const DEFAULT_INVOICE_STYLE: InvoiceStyle = {
   emptyRowsCount: 10,
   containerWidth: 305, // 305mm as requested
   containerPadding: 40, // 40px (py-12 px-10 is about 40px)
-  fontSizeHeader: 14,
+  fontSizeHeader: 12,
   fontSizeTable: 12,
   doubleUnderlineColor: '#1A202C',
   doubleUnderlineThickness: 3,
   hideStoreName: true, // Go ahead and hide store name by default as requested
   tableBorderColor: '#CBD5E1', // default slate-300 color
-  fontFamilyHeader: 'Georgia, serif', // default formal serif for basic info
-  fontFamilyTable: 'ui-monospace, monospace', // default technical mono for table data
-  fontFamilyBase: 'system-ui, sans-serif', // default sans-serif for rest
-  fontFamilyAddress: 'system-ui, -apple-system, sans-serif',
+  fontFamilyHeader: '"Microsoft YaHei", "微软雅黑", system-ui, sans-serif', // default formal serif for basic info
+  fontFamilyTable: '"Microsoft YaHei", "微软雅黑", system-ui, sans-serif', // default technical mono for table data
+  fontFamilyBase: '"Microsoft YaHei", "微软雅黑", system-ui, sans-serif', // default sans-serif for rest
+  fontFamilyAddress: '"Microsoft YaHei", "微软雅黑", system-ui, sans-serif',
   addressLineHeight: '1.0',
   headerTableSpacing: 24,
   addressFontSize: 12,
