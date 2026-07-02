@@ -242,19 +242,28 @@ export default function Receipt({
       const computed = window.getComputedStyle(origHtml);
       if (cloneHtml.style) {
         const properties = [
-          'display', 'flexDirection', 'justifyContent', 'alignItems', 'flexWrap', 'flexGrow', 'flexShrink',
-          'gridTemplateColumns', 'gridTemplateRows', 'gridColumn', 'gridRow', 'gap',
-          'position', 'top', 'bottom', 'left', 'right',
+          // 1. Layout & Flexbox & Grid
+          'display', 'flexDirection', 'justifyContent', 'alignItems', 'flexWrap', 
+          'flexGrow', 'flexShrink', 'gap', 'position', 'top', 'bottom', 'left', 'right',
+          'gridTemplateColumns', 'gridTemplateRows', 'gridColumn', 'gridRow', 'alignSelf', 'justifySelf',
+          
+          // 2. Sizes & Spacing
           'width', 'height', 'minWidth', 'maxWidth', 'minHeight', 'maxHeight',
           'padding', 'paddingTop', 'paddingBottom', 'paddingLeft', 'paddingRight',
           'margin', 'marginTop', 'marginBottom', 'marginLeft', 'marginRight',
-          'color', 'backgroundColor',
-          'borderColor', 'borderTopColor', 'borderBottomColor', 'borderLeftColor', 'borderRightColor',
+          
+          // 3. Typography
+          'fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'textAlign', 'textTransform', 'letterSpacing',
+          'whiteSpace', 'wordBreak', 'verticalAlign', 'color',
+          
+          // 4. Background & Borders
+          'backgroundColor', 'borderColor', 'borderTopColor', 'borderBottomColor', 'borderLeftColor', 'borderRightColor',
           'borderStyle', 'borderTopStyle', 'borderBottomStyle', 'borderLeftStyle', 'borderRightStyle',
           'borderWidth', 'borderTopWidth', 'borderBottomWidth', 'borderLeftWidth', 'borderRightWidth',
           'borderRadius', 'borderTopLeftRadius', 'borderTopRightRadius', 'borderBottomLeftRadius', 'borderBottomRightRadius',
-          'fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'textAlign', 'textTransform', 'letterSpacing',
-          'boxShadow', 'opacity', 'transform', 'overflow'
+          
+          // 5. Box shadow, opacity, etc.
+          'boxShadow', 'opacity', 'visibility'
         ];
 
         for (const prop of properties) {
@@ -276,6 +285,15 @@ export default function Receipt({
           let strokeVal = computed.stroke;
           if (strokeVal && (strokeVal.includes('oklch(') || strokeVal.includes('oklab('))) strokeVal = convertOklchToRgbString(strokeVal);
           cloneHtml.style.stroke = strokeVal;
+        }
+        if (computed.strokeWidth) {
+          cloneHtml.style.strokeWidth = computed.strokeWidth;
+        }
+        if (computed.strokeLinecap) {
+          cloneHtml.style.strokeLinecap = computed.strokeLinecap;
+        }
+        if (computed.strokeLinejoin) {
+          cloneHtml.style.strokeLinejoin = computed.strokeLinejoin;
         }
       }
     } catch (e) {
@@ -422,56 +440,7 @@ export default function Receipt({
     const element = isInvoice ? invoiceRef.current : receiptRef.current;
     if (!element) return;
 
-    // Temporarily sanitize style elements on the live document to prevent html2canvas parsing crash
-    const restoredStyles: { el: HTMLStyleElement; originalText: string }[] = [];
-    const detachedLinks: { el: HTMLLinkElement; parent: Node; nextSibling: Node | null }[] = [];
-    let originalAdoptedStyleSheets: any[] = [];
-
     try {
-      // 1. Sanitize adoptedStyleSheets on the live document
-      try {
-        // @ts-ignore
-        if (document.adoptedStyleSheets) {
-          // @ts-ignore
-          originalAdoptedStyleSheets = [...document.adoptedStyleSheets];
-          // @ts-ignore
-          document.adoptedStyleSheets = [];
-        }
-      } catch (e) {
-        // Ignore
-      }
-
-      // 2. Sanitize and convert all style and link elements in the main live document
-      const styleElements = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]')) as (HTMLStyleElement | HTMLLinkElement)[];
-      for (const el of styleElements) {
-        if (el.tagName === 'STYLE') {
-          const style = el as HTMLStyleElement;
-          const originalText = style.textContent || '';
-          if (originalText.toLowerCase().includes('oklch') || originalText.toLowerCase().includes('oklab')) {
-            restoredStyles.push({ el: style, originalText });
-            style.textContent = convertOklchToRgbString(originalText);
-          }
-        } else if (el.tagName === 'LINK') {
-          const link = el as HTMLLinkElement;
-          const href = link.href || '';
-          // Skip Google Fonts
-          if (href.includes('fonts.googleapis.com') || href.includes('fonts.gstatic.com')) {
-            continue;
-          }
-          
-          // Detach link stylesheet to prevent html2canvas parsing crashes
-          const parent = link.parentNode;
-          if (parent) {
-            detachedLinks.push({
-              el: link,
-              parent,
-              nextSibling: link.nextSibling
-            });
-            link.remove();
-          }
-        }
-      }
-
       const containerWidthPx = isInvoice
         ? Math.round((invoiceStyle.containerWidth / 25.4) * 96)
         : 450;
@@ -586,29 +555,6 @@ export default function Receipt({
     } catch (err) {
       console.error('Failed to generate image', err);
       triggerAlert('生成图片失败，请稍后重试');
-    } finally {
-      // Restore original style content
-      for (const item of restoredStyles) {
-        item.el.textContent = item.originalText;
-      }
-      // Re-insert detached link elements
-      for (const item of detachedLinks) {
-        try {
-          item.parent.insertBefore(item.el, item.nextSibling);
-        } catch (e) {
-          item.parent.appendChild(item.el);
-        }
-      }
-      // Restore original adoptedStyleSheets
-      try {
-        // @ts-ignore
-        if (document.adoptedStyleSheets && originalAdoptedStyleSheets.length > 0) {
-          // @ts-ignore
-          document.adoptedStyleSheets = originalAdoptedStyleSheets;
-        }
-      } catch (e) {
-        // Ignore
-      }
     }
   };
 
@@ -618,56 +564,7 @@ export default function Receipt({
     const element = isInvoice ? invoiceRef.current : receiptRef.current;
     if (!element) return;
 
-    // Temporarily sanitize style elements on the live document to prevent html2canvas parsing crash
-    const restoredStyles: { el: HTMLStyleElement; originalText: string }[] = [];
-    const detachedLinks: { el: HTMLLinkElement; parent: Node; nextSibling: Node | null }[] = [];
-    let originalAdoptedStyleSheets: any[] = [];
-
     try {
-      // 1. Sanitize adoptedStyleSheets on the live document
-      try {
-        // @ts-ignore
-        if (document.adoptedStyleSheets) {
-          // @ts-ignore
-          originalAdoptedStyleSheets = [...document.adoptedStyleSheets];
-          // @ts-ignore
-          document.adoptedStyleSheets = [];
-        }
-      } catch (e) {
-        // Ignore
-      }
-
-      // 2. Sanitize and convert all style and link elements in the main live document
-      const styleElements = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]')) as (HTMLStyleElement | HTMLLinkElement)[];
-      for (const el of styleElements) {
-        if (el.tagName === 'STYLE') {
-          const style = el as HTMLStyleElement;
-          const originalText = style.textContent || '';
-          if (originalText.toLowerCase().includes('oklch') || originalText.toLowerCase().includes('oklab')) {
-            restoredStyles.push({ el: style, originalText });
-            style.textContent = convertOklchToRgbString(originalText);
-          }
-        } else if (el.tagName === 'LINK') {
-          const link = el as HTMLLinkElement;
-          const href = link.href || '';
-          // Skip Google Fonts
-          if (href.includes('fonts.googleapis.com') || href.includes('fonts.gstatic.com')) {
-            continue;
-          }
-          
-          // Detach link stylesheet to prevent html2canvas parsing crashes
-          const parent = link.parentNode;
-          if (parent) {
-            detachedLinks.push({
-              el: link,
-              parent,
-              nextSibling: link.nextSibling
-            });
-            link.remove();
-          }
-        }
-      }
-
       const containerWidthPx = isInvoice
         ? Math.round((invoiceStyle.containerWidth / 25.4) * 96)
         : 450;
@@ -794,29 +691,6 @@ export default function Receipt({
     } catch (err) {
       console.error('Failed to generate PDF', err);
       triggerAlert('生成PDF失败，请稍后重试');
-    } finally {
-      // Restore original style content
-      for (const item of restoredStyles) {
-        item.el.textContent = item.originalText;
-      }
-      // Re-insert detached link elements
-      for (const item of detachedLinks) {
-        try {
-          item.parent.insertBefore(item.el, item.nextSibling);
-        } catch (e) {
-          item.parent.appendChild(item.el);
-        }
-      }
-      // Restore original adoptedStyleSheets
-      try {
-        // @ts-ignore
-        if (document.adoptedStyleSheets && originalAdoptedStyleSheets.length > 0) {
-          // @ts-ignore
-          document.adoptedStyleSheets = originalAdoptedStyleSheets;
-        }
-      } catch (e) {
-        // Ignore
-      }
     }
   };
 
