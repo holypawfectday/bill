@@ -309,6 +309,77 @@ export default function Receipt({
     }
   };
 
+  // Helper to sanitize all elements, styles and sheets in the cloned document from oklch/oklab to prevent html2canvas crashes
+  const sanitizeClonedDocStyles = (clonedDoc: Document) => {
+    // 1. Sanitize all style tags text content
+    try {
+      const styleTags = Array.from(clonedDoc.querySelectorAll('style')) as HTMLStyleElement[];
+      for (const style of styleTags) {
+        if (style.textContent && (style.textContent.includes('oklch(') || style.textContent.includes('oklab(') || style.textContent.includes('OKLCH(') || style.textContent.includes('OKLAB('))) {
+          style.textContent = convertOklchToRgbString(style.textContent);
+        }
+      }
+    } catch (e) {
+      console.error('Error sanitizing style tags', e);
+    }
+
+    // 2. Sanitize style sheets' rules (including stylesheet links and CSSOM rules)
+    try {
+      const sheets = Array.from(clonedDoc.styleSheets);
+      for (const sheet of sheets) {
+        try {
+          if (!sheet.cssRules) continue;
+          const rules = Array.from(sheet.cssRules);
+          for (let i = rules.length - 1; i >= 0; i--) {
+            const rule = rules[i];
+            if (rule.cssText && (rule.cssText.includes('oklch(') || rule.cssText.includes('oklab(') || rule.cssText.includes('OKLCH(') || rule.cssText.includes('OKLAB('))) {
+              try {
+                const converted = convertOklchToRgbString(rule.cssText);
+                sheet.deleteRule(i);
+                sheet.insertRule(converted, i);
+              } catch (ruleErr) {
+                // If we fail to replace the rule, delete it to prevent html2canvas crashing on it
+                try {
+                  sheet.deleteRule(i);
+                } catch (e) {}
+              }
+            }
+          }
+        } catch (sheetErr) {
+          // SecurityError (cross-origin stylesheet) -> remove the node to prevent html2canvas from loading/parsing it
+          try {
+            const node = sheet.ownerNode as any;
+            if (node && node.parentNode) {
+              node.parentNode.removeChild(node);
+            }
+          } catch (e) {}
+        }
+      }
+    } catch (e) {
+      console.error('Error sanitizing style sheets', e);
+    }
+
+    // 3. Sanitize inline styles of all cloned elements
+    try {
+      const allElements = Array.from(clonedDoc.querySelectorAll('*')) as HTMLElement[];
+      for (const el of allElements) {
+        if (el.style) {
+          for (let i = 0; i < el.style.length; i++) {
+            const prop = el.style[i];
+            let val = el.style.getPropertyValue(prop);
+            if (val && (val.includes('oklch(') || val.includes('oklab(') || val.includes('OKLCH(') || val.includes('OKLAB('))) {
+              try {
+                el.style.setProperty(prop, convertOklchToRgbString(val));
+              } catch (e) {}
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Error sanitizing element styles', e);
+    }
+  };
+
   // Find matching family member account based on memberId or matching dogName to register in printing
   const matchedFamilyAccount = React.useMemo(() => {
     if (!bill.memberId) return null;
@@ -440,7 +511,13 @@ export default function Receipt({
     const element = isInvoice ? invoiceRef.current : receiptRef.current;
     if (!element) return;
 
+    const originalScrollX = window.scrollX;
+    const originalScrollY = window.scrollY;
+
     try {
+      // Temporarily scroll to top left to prevent html2canvas offset issues or blank drawings
+      window.scrollTo(0, 0);
+
       const containerWidthPx = isInvoice
         ? Math.round((invoiceStyle.containerWidth / 25.4) * 96)
         : 450;
@@ -451,110 +528,95 @@ export default function Receipt({
         useCORS: true,
         backgroundColor: '#ffffff',
         logging: false,
+        width: isInvoice ? containerWidthPx : 450, // Lock the canvas width to match the cloned element width to prevent cut-offs!
         windowWidth: containerWidthPx + 100,
         scrollX: 0,
         scrollY: 0,
         x: 0,
         y: 0,
         onclone: (clonedDoc) => {
-          // 1. Clear any adopted stylesheets inside clonedDoc as well
           try {
-            // @ts-ignore
-            clonedDoc.adoptedStyleSheets = [];
-          } catch (e) {
-            // Ignore
-          }
-
-          // 2. Sanitize style and link elements inside clonedDoc
-          const clonedStyleElements = Array.from(clonedDoc.querySelectorAll('style, link[rel="stylesheet"]')) as (HTMLStyleElement | HTMLLinkElement)[];
-          for (const el of clonedStyleElements) {
-            if (el.tagName === 'STYLE') {
-              const style = el as HTMLStyleElement;
-              if (style.textContent) {
-                style.textContent = convertOklchToRgbString(style.textContent);
-              }
-            } else if (el.tagName === 'LINK') {
-              const link = el as HTMLLinkElement;
-              const href = link.href || '';
-              if (href.includes('fonts.googleapis.com') || href.includes('fonts.gstatic.com')) {
-                continue;
-              }
-              try {
-                const sheet = link.sheet;
-                if (sheet) {
-                  let rulesText = '';
-                  const rules = Array.from(sheet.cssRules);
-                  for (const rule of rules) {
-                    rulesText += rule.cssText + '\n';
-                  }
-                  if (rulesText) {
-                    const styleEl = clonedDoc.createElement('style');
-                    styleEl.textContent = convertOklchToRgbString(rulesText);
-                    link.parentNode?.replaceChild(styleEl, link);
-                  }
-                }
-              } catch (e) {
-                link.parentNode?.removeChild(link);
-              }
-            }
-          }
-
-          // 3. Setup target cloned element
-          const targetId = isInvoice ? 'formal-invoice-container' : `receipt-paper-${bill.id}`;
-          const clonedElement = clonedDoc.getElementById(targetId) as HTMLElement | null;
-          if (clonedElement) {
-            // Recursively copy absolute styles inline to make it completely self-contained and accurate
-            copyComputedStyles(element, clonedElement);
-
-            // Reset transforms, borders, shadows so it is rendered completely
-            clonedElement.style.transform = 'none';
-            clonedElement.style.webkitTransform = 'none';
-            clonedElement.style.position = 'relative';
-            clonedElement.style.left = 'auto';
-            clonedElement.style.top = 'auto';
-            clonedElement.style.marginLeft = 'auto';
-            clonedElement.style.marginRight = 'auto';
-            clonedElement.style.boxShadow = 'none';
-            clonedElement.style.border = 'none';
-            clonedElement.style.opacity = '1';
-            clonedElement.style.visibility = 'visible';
-            clonedElement.style.display = 'block';
-
-            if (isInvoice) {
-              clonedElement.style.width = `${invoiceStyle.containerWidth}mm`;
-              clonedElement.style.minWidth = `${invoiceStyle.containerWidth}mm`;
-              clonedElement.style.height = 'auto';
-              clonedElement.style.minHeight = '297mm';
-            } else {
-              clonedElement.style.width = '450px';
-              clonedElement.style.height = 'auto';
+            // 1. Clear any adopted stylesheets inside clonedDoc as well
+            try {
+              // @ts-ignore
+              clonedDoc.adoptedStyleSheets = [];
+            } catch (e) {
+              // Ignore
             }
 
-            // Expand all parents in cloned document to allow full height drawing
-            let parent = clonedElement.parentElement;
-            while (parent) {
-              parent.style.transform = 'none';
-              parent.style.webkitTransform = 'none';
-              parent.style.position = 'relative';
-              parent.style.left = 'auto';
-              parent.style.top = 'auto';
-              parent.style.width = '100%';
-              parent.style.height = 'auto';
-              parent.style.overflow = 'visible';
-              parent = parent.parentElement;
+            // 2. Setup target cloned element using element.id and fallback classes
+            const targetId = element.id || (isInvoice ? 'formal-invoice-container' : `receipt-paper-${bill.id}`);
+            let clonedElement = clonedDoc.getElementById(targetId) as HTMLElement | null;
+            if (!clonedElement) {
+              clonedElement = clonedDoc.querySelector('.print-container') as HTMLElement | null;
             }
+            if (clonedElement) {
+              // Recursively copy absolute styles inline to make it completely self-contained and accurate
+              copyComputedStyles(element, clonedElement);
+
+              // Detach clonedElement, clear body, and append to make it the sole element
+              if (clonedElement.parentNode) {
+                clonedElement.parentNode.removeChild(clonedElement);
+              }
+              clonedDoc.body.innerHTML = '';
+              clonedDoc.body.appendChild(clonedElement);
+
+              // Reset body margins and padding
+              clonedDoc.body.style.margin = '0';
+              clonedDoc.body.style.padding = '0';
+              clonedDoc.body.style.backgroundColor = '#ffffff';
+
+              // Reset transforms, borders, shadows so it is rendered completely
+              clonedElement.style.transform = 'none';
+              clonedElement.style.webkitTransform = 'none';
+              clonedElement.style.position = 'relative';
+              clonedElement.style.left = 'auto';
+              clonedElement.style.top = 'auto';
+              clonedElement.style.marginLeft = 'auto';
+              clonedElement.style.marginRight = 'auto';
+              clonedElement.style.boxShadow = 'none';
+              clonedElement.style.opacity = '1';
+              clonedElement.style.visibility = 'visible';
+              clonedElement.style.display = 'block';
+
+              if (isInvoice) {
+                clonedElement.style.border = 'none';
+                clonedElement.style.width = `${invoiceStyle.containerWidth}mm`;
+                clonedElement.style.minWidth = `${invoiceStyle.containerWidth}mm`;
+                clonedElement.style.maxWidth = `${invoiceStyle.containerWidth}mm`;
+                clonedElement.style.height = 'auto';
+                clonedElement.style.minHeight = '297mm';
+              } else {
+                clonedElement.style.border = '4px solid #1A202C'; // Keep the cute border!
+                clonedElement.style.borderRadius = '24px';       // Keep the cute corners!
+                clonedElement.style.width = '450px';
+                clonedElement.style.minWidth = '450px';
+                clonedElement.style.maxWidth = '450px';
+                clonedElement.style.height = 'auto';
+              }
+            }
+
+            // 3. Sanitize all styles, stylesheets, and elements to replace any oklch / oklab colors
+            sanitizeClonedDocStyles(clonedDoc);
+          } catch (err) {
+            console.error('Error during html2canvas onclone styling', err);
           }
         }
       });
 
       const imgData = canvas.toDataURL('image/png');
       const link = document.createElement('a');
-      link.download = `好厉害乐园_${isInvoice ? '正式账单' : '小票'}_${bill.dogName}_${bill.billNumber}.png`;
+      const safeDogName = bill.dogName || '宝贝';
+      const safeBillNumber = bill.billNumber || 'DRAFT';
+      link.download = `好厉害乐园_${isInvoice ? '正式账单' : '小票'}_${safeDogName}_${safeBillNumber}.png`;
       link.href = imgData;
       link.click();
     } catch (err) {
       console.error('Failed to generate image', err);
       triggerAlert('生成图片失败，请稍后重试');
+    } finally {
+      // Restore scroll position
+      window.scrollTo(originalScrollX, originalScrollY);
     }
   };
 
@@ -564,7 +626,13 @@ export default function Receipt({
     const element = isInvoice ? invoiceRef.current : receiptRef.current;
     if (!element) return;
 
+    const originalScrollX = window.scrollX;
+    const originalScrollY = window.scrollY;
+
     try {
+      // Temporarily scroll to top left to prevent html2canvas offset issues or blank drawings
+      window.scrollTo(0, 0);
+
       const containerWidthPx = isInvoice
         ? Math.round((invoiceStyle.containerWidth / 25.4) * 96)
         : 450;
@@ -575,98 +643,78 @@ export default function Receipt({
         useCORS: true,
         backgroundColor: '#ffffff',
         logging: false,
+        width: isInvoice ? containerWidthPx : 450, // Lock the canvas width to match the cloned element width to prevent cut-offs!
         windowWidth: containerWidthPx + 100,
         scrollX: 0,
         scrollY: 0,
         x: 0,
         y: 0,
         onclone: (clonedDoc) => {
-          // 1. Clear any adopted stylesheets inside clonedDoc as well
           try {
-            // @ts-ignore
-            clonedDoc.adoptedStyleSheets = [];
-          } catch (e) {
-            // Ignore
-          }
-
-          // 2. Sanitize style and link elements inside clonedDoc
-          const clonedStyleElements = Array.from(clonedDoc.querySelectorAll('style, link[rel="stylesheet"]')) as (HTMLStyleElement | HTMLLinkElement)[];
-          for (const el of clonedStyleElements) {
-            if (el.tagName === 'STYLE') {
-              const style = el as HTMLStyleElement;
-              if (style.textContent) {
-                style.textContent = convertOklchToRgbString(style.textContent);
-              }
-            } else if (el.tagName === 'LINK') {
-              const link = el as HTMLLinkElement;
-              const href = link.href || '';
-              if (href.includes('fonts.googleapis.com') || href.includes('fonts.gstatic.com')) {
-                continue;
-              }
-              try {
-                const sheet = link.sheet;
-                if (sheet) {
-                  let rulesText = '';
-                  const rules = Array.from(sheet.cssRules);
-                  for (const rule of rules) {
-                    rulesText += rule.cssText + '\n';
-                  }
-                  if (rulesText) {
-                    const styleEl = clonedDoc.createElement('style');
-                    styleEl.textContent = convertOklchToRgbString(rulesText);
-                    link.parentNode?.replaceChild(styleEl, link);
-                  }
-                }
-              } catch (e) {
-                link.parentNode?.removeChild(link);
-              }
-            }
-          }
-
-          // 3. Setup target cloned element
-          const targetId = isInvoice ? 'formal-invoice-container' : `receipt-paper-${bill.id}`;
-          const clonedElement = clonedDoc.getElementById(targetId) as HTMLElement | null;
-          if (clonedElement) {
-            // Recursively copy absolute styles inline to make it completely self-contained and accurate
-            copyComputedStyles(element, clonedElement);
-
-            // Reset transforms, borders, shadows so it is rendered completely
-            clonedElement.style.transform = 'none';
-            clonedElement.style.webkitTransform = 'none';
-            clonedElement.style.position = 'relative';
-            clonedElement.style.left = 'auto';
-            clonedElement.style.top = 'auto';
-            clonedElement.style.marginLeft = 'auto';
-            clonedElement.style.marginRight = 'auto';
-            clonedElement.style.boxShadow = 'none';
-            clonedElement.style.border = 'none';
-            clonedElement.style.opacity = '1';
-            clonedElement.style.visibility = 'visible';
-            clonedElement.style.display = 'block';
-
-            if (isInvoice) {
-              clonedElement.style.width = `${invoiceStyle.containerWidth}mm`;
-              clonedElement.style.minWidth = `${invoiceStyle.containerWidth}mm`;
-              clonedElement.style.height = 'auto';
-              clonedElement.style.minHeight = '297mm';
-            } else {
-              clonedElement.style.width = '450px';
-              clonedElement.style.height = 'auto';
+            // 1. Clear any adopted stylesheets inside clonedDoc as well
+            try {
+              // @ts-ignore
+              clonedDoc.adoptedStyleSheets = [];
+            } catch (e) {
+              // Ignore
             }
 
-            // Expand all parents in cloned document to allow full height drawing
-            let parent = clonedElement.parentElement;
-            while (parent) {
-              parent.style.transform = 'none';
-              parent.style.webkitTransform = 'none';
-              parent.style.position = 'relative';
-              parent.style.left = 'auto';
-              parent.style.top = 'auto';
-              parent.style.width = '100%';
-              parent.style.height = 'auto';
-              parent.style.overflow = 'visible';
-              parent = parent.parentElement;
+            // 2. Setup target cloned element using element.id and fallback classes
+            const targetId = element.id || (isInvoice ? 'formal-invoice-container' : `receipt-paper-${bill.id}`);
+            let clonedElement = clonedDoc.getElementById(targetId) as HTMLElement | null;
+            if (!clonedElement) {
+              clonedElement = clonedDoc.querySelector('.print-container') as HTMLElement | null;
             }
+            if (clonedElement) {
+              // Recursively copy absolute styles inline to make it completely self-contained and accurate
+              copyComputedStyles(element, clonedElement);
+
+              // Detach clonedElement, clear body, and append to make it the sole element
+              if (clonedElement.parentNode) {
+                clonedElement.parentNode.removeChild(clonedElement);
+              }
+              clonedDoc.body.innerHTML = '';
+              clonedDoc.body.appendChild(clonedElement);
+
+              // Reset body margins and padding
+              clonedDoc.body.style.margin = '0';
+              clonedDoc.body.style.padding = '0';
+              clonedDoc.body.style.backgroundColor = '#ffffff';
+
+              // Reset transforms, borders, shadows so it is rendered completely
+              clonedElement.style.transform = 'none';
+              clonedElement.style.webkitTransform = 'none';
+              clonedElement.style.position = 'relative';
+              clonedElement.style.left = 'auto';
+              clonedElement.style.top = 'auto';
+              clonedElement.style.marginLeft = 'auto';
+              clonedElement.style.marginRight = 'auto';
+              clonedElement.style.boxShadow = 'none';
+              clonedElement.style.opacity = '1';
+              clonedElement.style.visibility = 'visible';
+              clonedElement.style.display = 'block';
+
+              if (isInvoice) {
+                clonedElement.style.border = 'none';
+                clonedElement.style.width = `${invoiceStyle.containerWidth}mm`;
+                clonedElement.style.minWidth = `${invoiceStyle.containerWidth}mm`;
+                clonedElement.style.maxWidth = `${invoiceStyle.containerWidth}mm`;
+                clonedElement.style.height = 'auto';
+                clonedElement.style.minHeight = '297mm';
+              } else {
+                clonedElement.style.border = '4px solid #1A202C'; // Keep the cute border!
+                clonedElement.style.borderRadius = '24px';       // Keep the cute corners!
+                clonedElement.style.width = '450px';
+                clonedElement.style.minWidth = '450px';
+                clonedElement.style.maxWidth = '450px';
+                clonedElement.style.height = 'auto';
+              }
+            }
+
+            // 3. Sanitize all styles, stylesheets, and elements to replace any oklch / oklab colors
+            sanitizeClonedDocStyles(clonedDoc);
+          } catch (err) {
+            console.error('Error during html2canvas onclone styling for PDF', err);
           }
         }
       });
@@ -687,10 +735,15 @@ export default function Receipt({
       });
       
       pdf.addImage(imgData, 'PNG', 0, 0, mmWidth, mmHeight);
-      pdf.save(`好厉害乐园_${isInvoice ? '正式账单' : '小票'}_${bill.dogName}_${bill.billNumber}.pdf`);
+      const safeDogName = bill.dogName || '宝贝';
+      const safeBillNumber = bill.billNumber || 'DRAFT';
+      pdf.save(`好厉害乐园_${isInvoice ? '正式账单' : '小票'}_${safeDogName}_${safeBillNumber}.pdf`);
     } catch (err) {
       console.error('Failed to generate PDF', err);
       triggerAlert('生成PDF失败，请稍后重试');
+    } finally {
+      // Restore scroll position
+      window.scrollTo(originalScrollX, originalScrollY);
     }
   };
 

@@ -137,17 +137,8 @@ export default function BillForm({
   // 3. Ref to service date input for focal reset
   const serviceDateInputRef = React.useRef<HTMLInputElement | null>(null);
 
-  // Resolve matching family member account based on memberId ONLY
-  const matchedAccount = React.useMemo(() => {
-    if (!isMember || !memberId.trim()) return null;
-    const rawInput = memberId.replace(/^MEM-/, '').trim();
-    const cleanInputId = /^\d+$/.test(rawInput) ? rawInput.padStart(12, '0') : rawInput;
-    if (cleanInputId) {
-      const match = memberAssets.find(acc => acc.memberId.toLowerCase() === cleanInputId.toLowerCase());
-      if (match) return match;
-    }
-    return null;
-  }, [isMember, memberId, memberAssets]);
+  // Resolve matching family member account - disabled/removed association as per request
+  const matchedAccount = null;
 
   // Helper function to check if service matches current pet type
   const isPetTypeMatched = (srv: ServiceItem, type: '狗狗' | '猫猫') => {
@@ -283,6 +274,16 @@ export default function BillForm({
       setUseDentalCoupon(0);
     }
   }, [isHoliday]);
+
+
+
+  // Clear memberId and memberDay when isMember becomes false
+  React.useEffect(() => {
+    if (!isMember) {
+      setMemberId('');
+      setIsMemberDay(false);
+    }
+  }, [isMember]);
 
   // Helper to get available coupons for a given service item (showing all annual card benefit coupons in dropdown)
   const getAvailableCouponsForService = (srv: ServiceItem | undefined) => {
@@ -811,40 +812,12 @@ export default function BillForm({
           </div>
         </div>
 
-        {/* 备注与美护备注 */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
-          <div className="space-y-1.5">
-            <label className="text-slate-500 text-[11px] font-black uppercase block">
-              美护备注
-            </label>
-            <input
-              type="text"
-              placeholder="例如: 修屁股毛/不剃肚子/自带沐浴露"
-              value={groomingNotes}
-              onChange={(e) => setGroomingNotes(e.target.value)}
-              className="w-full bg-white border-2 border-slate-800 focus:ring-4 focus:ring-[#B9E3F8]/50 focus:border-slate-800 rounded-xl px-4 py-2 text-xs outline-none transition-all duration-150 font-bold shadow-[2px_2px_0px_0px_#1A202C]"
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-slate-500 text-[11px] font-black uppercase block">
-              账单备注
-            </label>
-            <input
-              type="text"
-              placeholder="例如: 离园前喂狗粮/带走牵引绳"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              className="w-full bg-white border-2 border-slate-800 focus:ring-4 focus:ring-[#B9E3F8]/50 focus:border-slate-800 rounded-xl px-4 py-2 text-xs outline-none transition-all duration-150 font-bold shadow-[2px_2px_0px_0px_#1A202C]"
-            />
-          </div>
-        </div>
+        {/* 备注与美护备注已被隐藏 */}
       </div>
 
-      {/* 🏷️ Row 2: 会员级别 & 日期/节假日设置 */}
-      <div className="pt-4 border-t-2 border-slate-200 grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Left column: Member tier select */}
-        <div className="space-y-3">
+      {/* 🏷️ Row 2: 会员级别 */}
+      <div className="pt-4 border-t-2 border-slate-200">
+        <div className="space-y-3 max-w-xl">
           <div className="text-xs font-black text-slate-800 flex items-center gap-1.5 font-hand bg-[#B9E3F8]/40 border-2 border-slate-800 py-1 px-3 rounded-xl shadow-[1.5px_1.5px_0px_0px_#1A202C] w-fit">
             2. 会员级别选择 / Member Tier
           </div>
@@ -876,99 +849,13 @@ export default function BillForm({
               <span className="text-[9px] font-bold opacity-80">可享年卡权益券</span>
             </button>
           </div>
-          {isMember && (
-            <div className="space-y-1.5 pt-1.5 animate-fade-in">
-              <label className="text-slate-500 text-[10px] font-black uppercase block">会员卡号 / 会员编号</label>
-              <input
-                type="text"
-                placeholder="请输入会员卡号 (如: 000000000034)"
-                value={memberId}
-                onChange={(e) => setMemberId(e.target.value)}
-                className="w-full bg-white border-2 border-slate-800 focus:ring-4 focus:ring-[#B9E3F8]/50 focus:border-slate-800 rounded-xl px-3 py-1.5 text-xs outline-none transition-all duration-150 font-bold shadow-[1.5px_1.5px_0px_0px_#1A202C]"
-              />
-
-              {matchedAccount && (
-                <div className="text-[9px] text-slate-500 font-bold leading-tight mt-1 text-left">
-                  * 权益可供旗下宠物 {matchedAccount.pets.map(p => p.name).join('、')} 共同使用。
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Right column: Coupon Balance Summary */}
-        <div className="space-y-3">
-          <div className="text-xs font-black text-slate-800 flex items-center gap-1.5 font-hand bg-[#B9E3F8]/40 border-2 border-slate-800 py-1 px-3 rounded-xl shadow-[1.5px_1.5px_0px_0px_#1A202C] w-fit">
-            3. 会员卡包券余额 / Coupons
-          </div>
-
-          {/* Real-time Coupon Balance Quick Viewer */}
-          {isMember && matchedAccount ? (
-            <div className="bg-white border-2 border-slate-800 rounded-xl p-2.5 shadow-[1.5px_1.5px_0px_0px_#1A202C] space-y-1.5 text-left animate-scale-up">
-              <div className="flex justify-between items-center border-b-2 border-dashed border-slate-100 pb-1">
-                <span className="text-[10px] font-black text-slate-800 flex items-center gap-1">
-                  <Gift className="w-3 h-3 text-rose-500 animate-bounce" />
-                  {matchedAccount.memberId} ({matchedAccount.tier})
-                </span>
-                <span className="text-[7.5px] font-black text-emerald-800 bg-emerald-50 border border-emerald-200 px-1 py-0.1 rounded">
-                  年卡券包联动成功
-                </span>
-              </div>
-              <div className="text-[9px] space-y-1">
-                <p className="font-bold text-slate-500">剩余可用权益卡包余额 (自动扣减)：</p>
-                <div className="grid grid-cols-2 gap-1 font-black text-[8.5px]">
-                  {(() => {
-                    // Calculate remaining counts after subtracting used items in customSelectedItems
-                    const daycareLeft = Math.max(0, matchedAccount.daycareCoupons.unused - usedDaycareCouponsCount);
-                    const boardingLeft = Math.max(0, matchedAccount.holidayCoupons.unused - usedBoardingCouponsCount);
-                    const specialLeft = matchedAccount.specialCareCoupons ? Math.max(0, matchedAccount.specialCareCoupons.unused - usedSpecialCareCouponsCount) : 0;
-                    const washLeft = Math.max(0, matchedAccount.washCoupons.unused - usedWashCouponsCount);
-                    const transferLeft = matchedAccount.transferCoupons ? Math.max(0, matchedAccount.transferCoupons.unused - usedTransferCouponsCount) : 0;
-
-                    return (
-                      <>
-                        <div className={`px-1.5 py-0.5 rounded flex justify-between ${daycareLeft > 0 ? 'bg-teal-50 border border-teal-200 text-teal-800' : 'bg-slate-50 text-slate-300 line-through'}`}>
-                          <span>全天日托:</span>
-                          <span>{daycareLeft}张</span>
-                        </div>
-                        <div className={`px-1.5 py-0.5 rounded flex justify-between ${boardingLeft > 0 ? 'bg-blue-50 border border-blue-200 text-blue-800' : 'bg-slate-50 text-slate-300 line-through'}`}>
-                          <span>度假房升级:</span>
-                          <span>{boardingLeft}张</span>
-                        </div>
-                        {matchedAccount.specialCareCoupons && (
-                          <div className={`px-1.5 py-0.5 rounded flex justify-between ${specialLeft > 0 ? 'bg-purple-50 border border-purple-200 text-purple-800' : 'bg-slate-50 text-slate-300 line-through'}`}>
-                            <span>陪护升级:</span>
-                            <span>{specialLeft}张</span>
-                          </div>
-                        )}
-                        <div className={`px-1.5 py-0.5 rounded flex justify-between ${washLeft > 0 ? 'bg-rose-50 border border-rose-200 text-rose-800' : 'bg-slate-50 text-slate-300 line-through'}`}>
-                          <span>高端洗护:</span>
-                          <span>{washLeft}张</span>
-                        </div>
-                        {matchedAccount.transferCoupons && (
-                          <div className={`px-1.5 py-0.5 rounded flex justify-between ${transferLeft > 0 ? 'bg-amber-50 border border-amber-200 text-amber-800' : 'bg-slate-50 text-slate-300 line-through'}`}>
-                            <span>接送抵扣:</span>
-                            <span>{transferLeft}张</span>
-                          </div>
-                        )}
-                      </>
-                    );
-                  })()}
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="border-2 border-dashed border-slate-300 rounded-xl bg-white p-4 text-center text-slate-400 text-[11px] font-bold">
-              输入会员卡号后即可在此显示名下资产。
-            </div>
-          )}
         </div>
       </div>
 
       {/* 🛍️ Row 3: 服务项目选择与自定义折扣/券套用 */}
       <div className="pt-4 border-t-2 border-slate-200 space-y-4">
         <div className="text-xs font-black text-slate-800 flex items-center gap-1.5 font-hand bg-[#B9E3F8]/40 border-2 border-slate-800 py-1 px-3 rounded-xl shadow-[1.5px_1.5px_0px_0px_#1A202C] w-fit">
-          4. 添加服务项目 / Add Service Item
+          3. 添加服务项目 / Add Service Item
         </div>
 
         <div className="bg-white rounded-2xl p-4 sm:p-5 border-2 border-slate-800 space-y-4 shadow-[3px_3px_0px_0px_#1A202C] text-left">
